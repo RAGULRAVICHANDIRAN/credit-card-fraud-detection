@@ -28,21 +28,12 @@ for _d in [RAW_DATA_DIR, PROCESSED_DATA_DIR, EXTERNAL_DATA_DIR,
     _d.mkdir(parents=True, exist_ok=True)
 
 # ──────────────────────────────────────────────
-# Dataset information
+# Dataset information (European Cardholders only)
 # ──────────────────────────────────────────────
-EU_DATASET_FILE = "creditcard.csv"
-SPARKOV_DATASET_FILE = "fraudTrain.csv"  # primary Sparkov file
-SPARKOV_TEST_FILE = "fraudTest.csv"
-
-EU_DATASET_URL = "https://www.kaggle.com/datasets/mlg-ulb/creditcardfraud"
-SPARKOV_DATASET_URL = "https://www.kaggle.com/datasets/kartik2112/fraud-detection"
-
-# Columns to drop from Sparkov dataset
-SPARKOV_DROP_COLS = [
-    "unix_time", "cc_num", "merchant", "first", "last",
-    "gender", "street", "city", "state", "lat", "long",
-    "trans_num", "merch_lat", "merch_long",
-]
+DATASET_NAME = "european"
+DATASET_FILE = "creditcard.csv"
+DATASET_URL = "https://www.kaggle.com/datasets/mlg-ulb/creditcardfraud"
+TARGET_COL = "Class"
 
 # ──────────────────────────────────────────────
 # Train / Validation / Test split ratios
@@ -128,13 +119,6 @@ STRATEGY_UNDERSAMPLE = "undersampled"
 STRATEGY_SMOTE = "smote"
 ALL_STRATEGIES = [STRATEGY_ORIGINAL, STRATEGY_OVERSAMPLE,
                   STRATEGY_UNDERSAMPLE, STRATEGY_SMOTE]
-
-# ──────────────────────────────────────────────
-# Dataset short names
-# ──────────────────────────────────────────────
-DS_EUROPEAN = "european"
-DS_SPARKOV = "sparkov"
-ALL_DATASETS = [DS_EUROPEAN, DS_SPARKOV]
 
 # ──────────────────────────────────────────────
 # Model registry names

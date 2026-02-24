@@ -2,9 +2,9 @@
 main.py – CLI entry-point for the Credit Card Fraud Detection project.
 
 Usage:
-    python main.py preprocess          Preprocess both datasets
+    python main.py preprocess          Preprocess the dataset
     python main.py train --existing    Train paper-replication models (NB, RF, XGB)
-    python main.py train --proposed    Train proposed models (CNN-BiGRU, BERT, Stacking)
+    python main.py train --proposed    Train proposed models (Stacking + tuning)
     python main.py evaluate            Evaluate all saved models and generate metrics
     python main.py explain             Run SHAP & LIME explainability
     python main.py dashboard           Launch Streamlit dashboard
@@ -26,14 +26,14 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.utils.config import (
-    RANDOM_SEED, MODELS_DIR, FIGURES_DIR,
-    ALL_STRATEGIES, DS_EUROPEAN, DS_SPARKOV,
+    RANDOM_SEED, MODELS_DIR, FIGURES_DIR, DATASET_NAME,
+    ALL_STRATEGIES,
     MODEL_NB, MODEL_RF, MODEL_XGB,
     MODEL_CNN_BIGRU, MODEL_BERT, MODEL_STACKING,
 )
 from src.utils.metrics import evaluate_model, results_to_dataframe, benchmark_model
-from src.data.download_data import download_all
-from src.data.preprocessing import preprocess_european, preprocess_sparkov, load_processed
+from src.data.download_data import download_dataset
+from src.data.preprocessing import preprocess, load_processed
 from src.data.balancing_strategies import get_balanced_datasets, describe_balance
 from src.models.baseline_models import get_naive_bayes
 from src.models.ensemble_models import (
@@ -54,27 +54,20 @@ warnings.filterwarnings("ignore")
 # ══════════════════════════════════════════════
 
 def cmd_preprocess(args):
-    """Run preprocessing for both datasets."""
+    """Run preprocessing for the European dataset."""
     print("\n" + "=" * 60)
     print("  STEP 1 — PREPROCESSING")
     print("=" * 60)
-    download_all()
+    download_dataset()
 
     try:
-        eu_data = preprocess_european()
-        print("[✓] European dataset preprocessed.\n")
-    except FileNotFoundError:
-        print("[✗] European dataset CSV not found. Download it first.\n")
-        eu_data = None
+        data = preprocess()
+        print("[✓] Dataset preprocessed.\n")
+    except FileNotFoundError as e:
+        print(f"[✗] {e}\n")
+        data = None
 
-    try:
-        sp_data = preprocess_sparkov()
-        print("[✓] Sparkov dataset preprocessed.\n")
-    except FileNotFoundError:
-        print("[✗] Sparkov dataset CSV not found. Download it first.\n")
-        sp_data = None
-
-    return eu_data, sp_data
+    return data
 
 
 # ══════════════════════════════════════════════
@@ -105,40 +98,37 @@ def _train_and_eval(model, model_name, X_train, y_train, X_test, y_test):
 
 
 def cmd_train_existing(args):
-    """Train NB, RF, XGBoost on all dataset × strategy combinations."""
+    """Train NB, RF, XGBoost on all strategy combinations."""
     print("\n" + "=" * 60)
     print("  STEP 2a — TRAINING EXISTING MODELS")
     print("=" * 60)
 
-    all_results = {}
+    try:
+        data = load_processed()
+    except FileNotFoundError:
+        print("[!] Processed data not found. Run 'preprocess' first.")
+        return {}
 
-    for ds_name in [DS_EUROPEAN, DS_SPARKOV]:
-        try:
-            data = load_processed(ds_name)
-        except FileNotFoundError:
-            print(f"[!] Processed data for {ds_name} not found. Run 'preprocess' first.")
-            continue
+    balanced = get_balanced_datasets(data["X_train"], data["y_train"])
+    all_results = {DATASET_NAME: {}}
 
-        balanced = get_balanced_datasets(data["X_train"], data["y_train"])
-        all_results[ds_name] = {}
+    for strat_name, (X_bal, y_bal) in balanced.items():
+        print(f"\n--- {strat_name} ---")
+        describe_balance(y_bal, strat_name)
+        all_results[DATASET_NAME][strat_name] = {}
 
-        for strat_name, (X_bal, y_bal) in balanced.items():
-            print(f"\n--- {ds_name} / {strat_name} ---")
-            describe_balance(y_bal, strat_name)
-            all_results[ds_name][strat_name] = {}
+        for model_name in [MODEL_NB, MODEL_RF, MODEL_XGB]:
+            model = _get_model(model_name)
+            trained, metrics = _train_and_eval(
+                model, model_name,
+                X_bal, y_bal,
+                data["X_test"], data["y_test"],
+            )
+            all_results[DATASET_NAME][strat_name][model_name] = metrics
 
-            for model_name in [MODEL_NB, MODEL_RF, MODEL_XGB]:
-                model = _get_model(model_name)
-                trained, metrics = _train_and_eval(
-                    model, model_name,
-                    X_bal, y_bal,
-                    data["X_test"], data["y_test"],
-                )
-                all_results[ds_name][strat_name][model_name] = metrics
-
-                # Save model
-                out_path = MODELS_DIR / f"{ds_name}_{strat_name}_{model_name}.joblib"
-                joblib.dump(trained, out_path)
+            # Save model
+            out_path = MODELS_DIR / f"{DATASET_NAME}_{strat_name}_{model_name}.joblib"
+            joblib.dump(trained, out_path)
 
     # Save results
     df = results_to_dataframe(all_results)
@@ -163,100 +153,92 @@ def _subsample(X, y, max_n=50000):
 
 
 def cmd_train_proposed(args):
-    """Train CNN-BiGRU, BERT, Stacking (on SMOTE-balanced EU data)."""
+    """Train Stacking, CNN-BiGRU, BERT (on SMOTE-balanced data)."""
     print("\n" + "=" * 60)
     print("  STEP 2b — TRAINING PROPOSED MODELS")
     print("=" * 60)
 
+    try:
+        data = load_processed()
+    except FileNotFoundError:
+        print("[!] Processed data not found.")
+        return {}
+
+    balanced = get_balanced_datasets(data["X_train"], data["y_train"])
+    X_smote, y_smote = balanced["smote"]
+    X_test, y_test = data["X_test"], data["y_test"]
+    X_val, y_val = data["X_val"], data["y_val"]
     results = {}
 
-    for ds_name in [DS_EUROPEAN, DS_SPARKOV]:
-        try:
-            data = load_processed(ds_name)
-        except FileNotFoundError:
-            print(f"[!] Processed data for {ds_name} not found.")
-            continue
+    # Cap training size for speed
+    X_fast, y_fast = _subsample(X_smote, y_smote, max_n=50000)
 
-        balanced = get_balanced_datasets(data["X_train"], data["y_train"])
-        X_smote, y_smote = balanced["smote"]
-        X_test, y_test = data["X_test"], data["y_test"]
-        X_val, y_val = data["X_val"], data["y_val"]
-        results[ds_name] = {}
+    # ── Stacking ──
+    print("\n--- Stacking Ensemble ---")
+    try:
+        stacking = get_stacking_ensemble()
+        stacking.fit(X_fast, y_fast)
+        y_pred = stacking.predict(X_test)
+        y_prob = stacking.predict_proba(X_test)[:, 1]
+        metrics = evaluate_model(y_test, y_pred, y_prob)
+        results[MODEL_STACKING] = metrics
+        print(f"  Stacking  F1={metrics['f1']:.4f}  AUC={metrics['roc_auc']:.4f}")
+        joblib.dump(stacking, MODELS_DIR / f"{DATASET_NAME}_smote_stacking.joblib")
+    except Exception as e:
+        print(f"  [!] Stacking failed: {e}")
 
-        # Cap training size for speed
-        X_fast, y_fast = _subsample(X_smote, y_smote, max_n=50000)
+    # ── CNN-BiGRU ──
+    print("\n--- CNN-BiGRU ---")
+    try:
+        from src.models.deep_learning_models import (
+            build_cnn_bigru, compile_cnn_bigru, train_cnn_bigru, reshape_for_cnn,
+        )
+        X_tr_3d = reshape_for_cnn(X_fast)
+        X_val_3d = reshape_for_cnn(X_val)
+        X_te_3d = reshape_for_cnn(X_test)
 
-        # ── Stacking ──
-        print(f"\n--- {ds_name} / Stacking Ensemble ---")
-        try:
-            stacking = get_stacking_ensemble()
-            stacking.fit(X_fast, y_fast)
-            y_pred = stacking.predict(X_test)
-            y_prob = stacking.predict_proba(X_test)[:, 1]
-            metrics = evaluate_model(y_test, y_pred, y_prob)
-            results[ds_name][MODEL_STACKING] = metrics
-            print(f"  Stacking  F1={metrics['f1']:.4f}  AUC={metrics['roc_auc']:.4f}")
-            joblib.dump(stacking, MODELS_DIR / f"{ds_name}_smote_stacking.joblib")
-        except Exception as e:
-            print(f"  [!] Stacking failed: {e}")
+        cnn_model = build_cnn_bigru(input_shape=(X_tr_3d.shape[1], 1))
+        cnn_model = compile_cnn_bigru(cnn_model)
+        history = train_cnn_bigru(cnn_model, X_tr_3d, y_fast, X_val_3d, y_val)
 
-        # ── CNN-BiGRU ──
-        print(f"\n--- {ds_name} / CNN-BiGRU ---")
-        try:
-            from src.models.deep_learning_models import (
-                build_cnn_bigru, compile_cnn_bigru, train_cnn_bigru, reshape_for_cnn,
-            )
-            X_tr_3d = reshape_for_cnn(X_smote)
-            X_val_3d = reshape_for_cnn(X_val)
-            X_te_3d = reshape_for_cnn(X_test)
+        y_prob_cnn = cnn_model.predict(X_te_3d).flatten()
+        y_pred_cnn = (y_prob_cnn >= 0.5).astype(int)
+        metrics = evaluate_model(y_test, y_pred_cnn, y_prob_cnn)
+        results[MODEL_CNN_BIGRU] = metrics
+        print(f"  CNN-BiGRU  F1={metrics['f1']:.4f}  AUC={metrics['roc_auc']:.4f}")
+        cnn_model.save(str(MODELS_DIR / f"{DATASET_NAME}_smote_cnn_bigru.h5"))
+    except Exception as e:
+        print(f"  [!] CNN-BiGRU failed: {e}")
 
-            cnn_model = build_cnn_bigru(input_shape=(X_tr_3d.shape[1], 1))
-            cnn_model = compile_cnn_bigru(cnn_model)
-            history = train_cnn_bigru(cnn_model, X_tr_3d, y_smote,
-                                      X_val_3d, y_val)
+    # ── BERT ──
+    print("\n--- BERT ---")
+    try:
+        from src.models.deep_learning_models import BertFraudClassifier
 
-            y_prob_cnn = cnn_model.predict(X_te_3d).flatten()
-            y_pred_cnn = (y_prob_cnn >= 0.5).astype(int)
-            metrics = evaluate_model(y_test, y_pred_cnn, y_prob_cnn)
-            results[ds_name][MODEL_CNN_BIGRU] = metrics
-            print(f"  CNN-BiGRU  F1={metrics['f1']:.4f}  AUC={metrics['roc_auc']:.4f}")
-            cnn_model.save(str(MODELS_DIR / f"{ds_name}_smote_cnn_bigru.h5"))
-        except Exception as e:
-            print(f"  [!] CNN-BiGRU failed: {e}")
+        n_bert = min(5000, len(X_fast))
+        idx = np.random.choice(len(X_fast), n_bert, replace=False)
+        X_bert_train = X_fast.iloc[idx] if hasattr(X_fast, "iloc") else X_fast[idx]
+        y_bert_train = y_fast.iloc[idx] if hasattr(y_fast, "iloc") else y_fast[idx]
 
-        # ── BERT ──
-        print(f"\n--- {ds_name} / BERT ---")
-        try:
-            from src.models.deep_learning_models import BertFraudClassifier
+        n_test = min(2000, len(X_test))
+        X_bert_test = X_test.iloc[:n_test] if hasattr(X_test, "iloc") else X_test[:n_test]
+        y_bert_test = y_test.iloc[:n_test] if hasattr(y_test, "iloc") else y_test[:n_test]
 
-            # Sub-sample for BERT (very slow on full data)
-            n_bert = min(5000, len(X_smote))
-            idx = np.random.choice(len(X_smote), n_bert, replace=False)
-            X_bert_train = X_smote.iloc[idx] if hasattr(X_smote, "iloc") else X_smote[idx]
-            y_bert_train = y_smote.iloc[idx] if hasattr(y_smote, "iloc") else y_smote[idx]
-
-            n_test = min(2000, len(X_test))
-            X_bert_test = X_test.iloc[:n_test] if hasattr(X_test, "iloc") else X_test[:n_test]
-            y_bert_test = y_test.iloc[:n_test] if hasattr(y_test, "iloc") else y_test[:n_test]
-
-            bert_clf = BertFraudClassifier()
-            bert_clf.prepare_data(X_bert_train, y_bert_train)
-            bert_clf.train()
-            y_prob_bert = bert_clf.predict_proba(X_bert_test)
-            y_pred_bert = (y_prob_bert >= 0.5).astype(int)
-            metrics = evaluate_model(y_bert_test, y_pred_bert, y_prob_bert)
-            results[ds_name][MODEL_BERT] = metrics
-            print(f"  BERT  F1={metrics['f1']:.4f}  AUC={metrics['roc_auc']:.4f}")
-        except Exception as e:
-            print(f"  [!] BERT failed: {e}")
+        bert_clf = BertFraudClassifier()
+        bert_clf.prepare_data(X_bert_train, y_bert_train)
+        bert_clf.train()
+        y_prob_bert = bert_clf.predict_proba(X_bert_test)
+        y_pred_bert = (y_prob_bert >= 0.5).astype(int)
+        metrics = evaluate_model(y_bert_test, y_pred_bert, y_prob_bert)
+        results[MODEL_BERT] = metrics
+        print(f"  BERT  F1={metrics['f1']:.4f}  AUC={metrics['roc_auc']:.4f}")
+    except Exception as e:
+        print(f"  [!] BERT failed: {e}")
 
     # Hyperparameter tuning
-    print("\n--- Hyperparameter Tuning (RF & XGB on EU SMOTE) ---")
+    print("\n--- Hyperparameter Tuning (RF & XGB on SMOTE) ---")
     try:
-        eu = load_processed(DS_EUROPEAN)
-        balanced_eu = get_balanced_datasets(eu["X_train"], eu["y_train"])
-        X_sm, y_sm = balanced_eu["smote"]
-        X_sm, y_sm = _subsample(X_sm, y_sm, max_n=50000)
+        X_sm, y_sm = _subsample(X_smote, y_smote, max_n=50000)
 
         best_rf, _ = tune_random_forest(X_sm, y_sm, n_iter=15)
         joblib.dump(best_rf, MODELS_DIR / "tuned_rf.joblib")
@@ -282,7 +264,6 @@ def cmd_evaluate(args):
     from src.visualization.plot_utils import (
         plot_methodology_flowchart,
         plot_performance_by_dataset,
-        plot_performance_per_dataset,
         plot_f1_density,
         plot_average_performance,
     )
@@ -296,8 +277,6 @@ def cmd_evaluate(args):
 
     plot_methodology_flowchart()
     plot_performance_by_dataset(df)
-    for ds in [DS_EUROPEAN, DS_SPARKOV]:
-        plot_performance_per_dataset(df, ds)
     plot_f1_density(df)
     plot_average_performance(df)
 
@@ -318,23 +297,22 @@ def cmd_explain(args):
         shap_analysis, shap_force_plot, lime_analysis, feature_importance_report,
     )
 
-    for ds_name in [DS_EUROPEAN, DS_SPARKOV]:
-        model_path = MODELS_DIR / f"{ds_name}_smote_xgboost.joblib"
-        if not model_path.exists():
-            print(f"[!] Model {model_path} not found. Skipping.")
-            continue
+    model_path = MODELS_DIR / f"{DATASET_NAME}_smote_xgboost.joblib"
+    if not model_path.exists():
+        print(f"[!] Model {model_path} not found. Run training first.")
+        return
 
-        model = joblib.load(model_path)
-        data = load_processed(ds_name)
-        save_dir = FIGURES_DIR / ds_name
+    model = joblib.load(model_path)
+    data = load_processed()
+    save_dir = FIGURES_DIR / DATASET_NAME
 
-        print(f"\n--- {ds_name.upper()} ---")
-        shap_analysis(model, data["X_test"], model_type="tree", save_dir=save_dir)
-        shap_force_plot(model, data["X_test"], instance_idx=0, save_dir=save_dir)
-        lime_analysis(model, data["X_train"], data["X_test"],
-                      instance_idx=0, save_dir=save_dir)
-        feature_importance_report(model, data["X_test"], data["y_test"],
-                                  save_dir=save_dir)
+    print(f"\n--- Explainability Analysis ---")
+    shap_analysis(model, data["X_test"], model_type="tree", save_dir=save_dir)
+    shap_force_plot(model, data["X_test"], instance_idx=0, save_dir=save_dir)
+    lime_analysis(model, data["X_train"], data["X_test"],
+                  instance_idx=0, save_dir=save_dir)
+    feature_importance_report(model, data["X_test"], data["y_test"],
+                              save_dir=save_dir)
 
     print(f"\n[✓] Explainability reports saved to {FIGURES_DIR}")
 
@@ -376,7 +354,7 @@ def main():
     )
     sub = parser.add_subparsers(dest="command")
 
-    sub.add_parser("preprocess", help="Preprocess both datasets")
+    sub.add_parser("preprocess", help="Preprocess the dataset")
 
     train_p = sub.add_parser("train", help="Train models")
     train_group = train_p.add_mutually_exclusive_group(required=True)
