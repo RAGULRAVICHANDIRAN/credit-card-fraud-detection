@@ -1,0 +1,38 @@
+# ── Core (works on all Python 3.8+) ──
+pandas>=1.5.3
+numpy>=1.24.3
+scipy>=1.10.1
+statsmodels>=0.14.0
+
+# Machine learning
+scikit-learn>=1.2.2
+xgboost>=1.7.5
+imbalanced-learn>=0.10.1
+
+# Explainability
+shap>=0.41.0
+lime>=0.2.0.1
+
+# Visualization
+matplotlib>=3.7.1
+seaborn>=0.12.2
+plotly>=5.14.1
+
+# Dashboard
+streamlit>=1.22.0
+
+# Notebooks
+jupyter>=1.0.0
+ipykernel>=6.23.0
+nbformat>=5.9.0
+
+# Utilities
+tqdm>=4.65.0
+joblib>=1.2.0
+kaggle>=1.5.13
+
+# ── Deep Learning (optional – requires Python <=3.12) ──
+# Uncomment these if your Python version supports them:
+# tensorflow>=2.12.0
+# torch>=2.0.1
+# transformers>=4.29.2
