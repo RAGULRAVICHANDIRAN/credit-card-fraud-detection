@@ -1,5 +1,5 @@
 """
-Ensemble models: Random Forest (bagging), XGBoost (boosting), and Stacking.
+Ensemble models: Random Forest (bagging), XGBoost & LightGBM (boosting), and Stacking.
 Includes both paper-parameter versions and hyperparameter-tuned versions.
 """
 
@@ -7,12 +7,14 @@ from sklearn.ensemble import RandomForestClassifier, StackingClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import RandomizedSearchCV
 from xgboost import XGBClassifier
+from lightgbm import LGBMClassifier
 import numpy as np
 
 from src.utils.config import (
     RANDOM_SEED,
     PAPER_RF_PARAMS,
     PAPER_XGB_PARAMS,
+    PAPER_LGBM_PARAMS,
     TUNE_RF_GRID,
     TUNE_XGB_GRID,
     N_SPLITS,
@@ -62,6 +64,25 @@ def get_xgboost(paper_params: bool = True, **overrides):
             **overrides,
         }
     return XGBClassifier(**params)
+
+
+def get_lightgbm(paper_params: bool = True, **overrides):
+    """
+    Return a LightGBM classifier.
+
+    If paper_params=True, uses default project parameters.
+    Complexity: O(t · d · log(n))
+    """
+    if paper_params:
+        params = {**PAPER_LGBM_PARAMS, **overrides}
+    else:
+        params = {
+            "n_estimators": 100,
+            "random_state": RANDOM_SEED,
+            "verbose": -1,
+            **overrides,
+        }
+    return LGBMClassifier(**params)
 
 
 # ──────────────────────────────────────────────

@@ -19,6 +19,8 @@ from plotly.subplots import make_subplots
 import joblib
 import time
 
+from dashboard.report_generator import generate_risk_report, _find_similar_transactions
+
 from src.utils.config import (
     MODELS_DIR, FIGURES_DIR, PROCESSED_DATA_DIR,
     DATASET_NAME, RANDOM_SEED, ALL_STRATEGIES,
@@ -339,7 +341,9 @@ page = st.sidebar.radio(
 st.sidebar.markdown("---")
 st.sidebar.markdown(
     '<div style="text-align:center; color:rgba(200,200,255,0.4); font-size:0.75rem;">'
-    'Built with ❤️ by FraudShield AI<br>v2.0 — Animated Edition</div>',
+    'Built with ❤️ by RAGUL AND ITS TEAM<br>'
+    'A PROJECT BY SGI BOYS<br><br>'
+    'RAGUL. R<br>ANISHKUMAR. P<br>ROBERTCHRISTOPHER. A</div>',
     unsafe_allow_html=True,
 )
 
@@ -628,13 +632,33 @@ elif page == "🔮 Predict & Explain":
     st.markdown('<div class="page-title">🔮 Predict & Explain</div>', unsafe_allow_html=True)
     st.markdown('<div class="page-subtitle">Enter transaction features to get a prediction with plain-English explanation</div>', unsafe_allow_html=True)
 
-    model_files = list(MODELS_DIR.glob("*.joblib"))
-    if not model_files:
+    # Only show the 4 core ML models (one per type)
+    _MODEL_MAP = {
+        "Naive Bayes": "naive_bayes",
+        "Random Forest": "random_forest",
+        "XGBoost": "xgboost",
+        "LightGBM": "lightgbm",
+    }
+    # Find one saved file per model type (prefer SMOTE strategy)
+    _available = {}
+    for display, key in _MODEL_MAP.items():
+        # Try SMOTE version first, then any match
+        smote = MODELS_DIR / f"{DATASET_NAME}_smote_{key}.joblib"
+        if smote.exists():
+            _available[display] = smote
+        else:
+            matches = list(MODELS_DIR.glob(f"*_{key}.joblib"))
+            if matches:
+                _available[display] = matches[0]
+
+    # Add ensemble option if at least 2 models are available
+    if len(_available) >= 2:
+        _available["🏆 Ensemble (All Models)"] = "ensemble"
+
+    if not _available:
         st.warning("No saved models found.")
     else:
-        model_choice = st.selectbox("🤖 Select Model", [f.stem for f in model_files])
-        model_path = MODELS_DIR / f"{model_choice}.joblib"
-        model = joblib.load(model_path)
+        model_choice = st.selectbox("🤖 Select Model", list(_available.keys()))
 
         sample_df = load_dataset_sample(n=1)
         if not sample_df.empty:
@@ -655,8 +679,65 @@ elif page == "🔮 Predict & Explain":
                     time.sleep(0.5)
 
                 input_df = pd.DataFrame([values])
-                pred = model.predict(input_df)[0]
-                prob = model.predict_proba(input_df)[0] if hasattr(model, "predict_proba") else None
+
+                if model_choice == "🏆 Ensemble (All Models)":
+                    # ── Ensemble: majority vote + averaged probabilities ──
+                    individual = {k: v for k, v in _available.items() if v != "ensemble"}
+                    all_preds = {}
+                    all_probs = {}
+                    for name, path in individual.items():
+                        m = joblib.load(path)
+                        all_preds[name] = int(m.predict(input_df)[0])
+                        if hasattr(m, "predict_proba"):
+                            all_probs[name] = m.predict_proba(input_df)[0]
+
+                    # Majority vote
+                    votes_fraud = sum(v for v in all_preds.values())
+                    pred = 1 if votes_fraud > len(all_preds) / 2 else 0
+
+                    # Average probabilities
+                    if all_probs:
+                        avg_prob = np.mean([p for p in all_probs.values()], axis=0)
+                        prob = avg_prob
+                    else:
+                        prob = None
+
+                    # Show per-model votes
+                    st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+                    st.markdown("### 🗳️ Per-Model Votes")
+                    vote_cols = st.columns(len(all_preds))
+                    for i, (name, v) in enumerate(all_preds.items()):
+                        emoji = "🚨" if v == 1 else "✅"
+                        label = "FRAUD" if v == 1 else "SAFE"
+                        color = "#fca5a5" if v == 1 else "#86efac"
+                        conf_str = ""
+                        if name in all_probs:
+                            c = all_probs[name][1] * 100 if v == 1 else all_probs[name][0] * 100
+                            conf_str = f"<br><span style='font-size:0.8rem;'>{c:.1f}%</span>"
+                        vote_cols[i].markdown(f"""
+                            <div class="metric-card delay-{i+1}">
+                                <div class="metric-icon">{emoji}</div>
+                                <div style="font-size:1rem; font-weight:700; color:{color};">{label}</div>
+                                <div class="metric-label">{name}{conf_str}</div>
+                            </div>
+                        """, unsafe_allow_html=True)
+                    st.markdown('</div>', unsafe_allow_html=True)
+                    st.markdown('<div class="glow-divider"></div>', unsafe_allow_html=True)
+
+                    # Use first tree-based model for SHAP explanation
+                    model = None
+                    for name in ["XGBoost", "Random Forest", "LightGBM"]:
+                        if name in individual:
+                            model = joblib.load(individual[name])
+                            break
+                    if model is None:
+                        model = joblib.load(list(individual.values())[0])
+                else:
+                    # ── Single model ──
+                    model_path = _available[model_choice]
+                    model = joblib.load(model_path)
+                    pred = model.predict(input_df)[0]
+                    prob = model.predict_proba(input_df)[0] if hasattr(model, "predict_proba") else None
 
                 # Result card
                 if pred == 1:
@@ -753,6 +834,84 @@ elif page == "🔮 Predict & Explain":
                             st.markdown(f"{i}. {r}")
                         if not reasons:
                             st.info("All values within normal ranges. Decision based on subtle feature interactions.")
+
+                # ── PDF Risk Report Download ──
+                st.markdown('<div class="glow-divider"></div>', unsafe_allow_html=True)
+
+                # Collect report data
+                _report_confidence = None
+                if prob is not None:
+                    _report_confidence = prob[1] if pred == 1 else prob[0]
+
+                # Get SHAP values for report (reuse if available)
+                _report_shap = None
+                try:
+                    if 'contrib' in dir() or 'contrib' in locals():
+                        _report_shap = contrib.values if hasattr(contrib, 'values') else None
+                except Exception:
+                    pass
+                # Try computing if not yet available
+                if _report_shap is None:
+                    try:
+                        import shap as _shap_mod
+                        _exp = _shap_mod.TreeExplainer(model)
+                        _sv = _exp.shap_values(input_df)
+                        if isinstance(_sv, list):
+                            _report_shap = _sv[1][0]
+                        else:
+                            _report_shap = _sv[0]
+                    except Exception:
+                        pass
+
+                # Collect reasons
+                _report_reasons = []
+                if _report_shap is not None:
+                    _r_contrib = pd.Series(_report_shap, index=feature_cols)
+                    _r_top = _r_contrib.abs().sort_values(ascending=False).head(5)
+                    _report_reasons = [_describe_feature(f, values[f], _r_contrib[f]) for f in _r_top.index]
+
+                # Find similar transactions
+                _sim_df = None
+                try:
+                    _full_data = load_dataset_sample(n=5000)
+                    if not _full_data.empty:
+                        _sim_df = _find_similar_transactions(values, _full_data, feature_cols, n=5)
+                except Exception:
+                    pass
+
+                # Get per-model votes if ensemble
+                _votes = None
+                _probs = None
+                if model_choice == "\U0001f3c6 Ensemble (All Models)":
+                    try:
+                        _votes = all_preds
+                        _probs = all_probs
+                    except Exception:
+                        pass
+
+                try:
+                    pdf_bytes = generate_risk_report(
+                        prediction=pred,
+                        confidence=_report_confidence,
+                        model_name=model_choice,
+                        feature_values=values,
+                        feature_cols=feature_cols,
+                        reasons=_report_reasons,
+                        shap_values=_report_shap,
+                        per_model_votes=_votes,
+                        per_model_probs=_probs,
+                        similar_df=_sim_df,
+                    )
+                    st.download_button(
+                        label="\U0001f4cb Download Risk Report (PDF)",
+                        data=pdf_bytes,
+                        file_name=f"fraud_risk_report_{int(time.time())}.pdf",
+                        mime="application/pdf",
+                        use_container_width=True,
+                        type="primary",
+                    )
+                except Exception as e:
+                    st.error(f"Could not generate PDF report: {e}")
 
 
 # ══════════════════════════════════════════════

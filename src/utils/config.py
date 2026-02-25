@@ -65,6 +65,15 @@ PAPER_XGB_PARAMS = {
     "eval_metric": "logloss",
 }
 
+PAPER_LGBM_PARAMS = {
+    "n_estimators": 100,
+    "max_depth": 5,
+    "learning_rate": 0.1,
+    "num_leaves": 31,
+    "random_state": RANDOM_SEED,
+    "verbose": -1,
+}
+
 # ──────────────────────────────────────────────
 # Hyperparameter search grids (proposed work)
 # ──────────────────────────────────────────────
@@ -126,9 +135,10 @@ ALL_STRATEGIES = [STRATEGY_ORIGINAL, STRATEGY_OVERSAMPLE,
 MODEL_NB = "naive_bayes"
 MODEL_RF = "random_forest"
 MODEL_XGB = "xgboost"
+MODEL_LGBM = "lightgbm"
 MODEL_CNN_BIGRU = "cnn_bigru"
 MODEL_BERT = "bert"
 MODEL_STACKING = "stacking"
-EXISTING_MODELS = [MODEL_NB, MODEL_RF, MODEL_XGB]
+EXISTING_MODELS = [MODEL_NB, MODEL_RF, MODEL_XGB, MODEL_LGBM]
 PROPOSED_MODELS = [MODEL_CNN_BIGRU, MODEL_BERT, MODEL_STACKING]
 ALL_MODELS = EXISTING_MODELS + PROPOSED_MODELS

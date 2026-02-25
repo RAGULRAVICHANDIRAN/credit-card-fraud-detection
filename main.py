@@ -28,7 +28,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from src.utils.config import (
     RANDOM_SEED, MODELS_DIR, FIGURES_DIR, DATASET_NAME,
     ALL_STRATEGIES,
-    MODEL_NB, MODEL_RF, MODEL_XGB,
+    MODEL_NB, MODEL_RF, MODEL_XGB, MODEL_LGBM,
     MODEL_CNN_BIGRU, MODEL_BERT, MODEL_STACKING,
 )
 from src.utils.metrics import evaluate_model, results_to_dataframe, benchmark_model
@@ -37,7 +37,7 @@ from src.data.preprocessing import preprocess, load_processed
 from src.data.balancing_strategies import get_balanced_datasets, describe_balance
 from src.models.baseline_models import get_naive_bayes
 from src.models.ensemble_models import (
-    get_random_forest, get_xgboost, get_stacking_ensemble,
+    get_random_forest, get_xgboost, get_lightgbm, get_stacking_ensemble,
     tune_random_forest, tune_xgboost,
 )
 
@@ -81,6 +81,8 @@ def _get_model(model_name):
         return get_random_forest(paper_params=True)
     elif model_name == MODEL_XGB:
         return get_xgboost(paper_params=True)
+    elif model_name == MODEL_LGBM:
+        return get_lightgbm(paper_params=True)
     else:
         raise ValueError(f"Unknown model: {model_name}")
 
@@ -117,7 +119,7 @@ def cmd_train_existing(args):
         describe_balance(y_bal, strat_name)
         all_results[DATASET_NAME][strat_name] = {}
 
-        for model_name in [MODEL_NB, MODEL_RF, MODEL_XGB]:
+        for model_name in [MODEL_NB, MODEL_RF, MODEL_XGB, MODEL_LGBM]:
             model = _get_model(model_name)
             trained, metrics = _train_and_eval(
                 model, model_name,
