@@ -5,6 +5,7 @@ SHAP explanations, feature impact chart, and similar transactions.
 """
 
 import io
+import re
 import tempfile
 import datetime
 import uuid
@@ -14,6 +15,12 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 from fpdf import FPDF
+
+
+def _sanitize(text: str) -> str:
+    """Remove emoji and other non-Latin-1 characters that Helvetica cannot render."""
+    # Keep basic printable ASCII + Latin-1 Supplement (U+00A0–U+00FF)
+    return re.sub(r'[^\x20-\x7E\u00A0-\u00FF]', '', str(text)).strip()
 
 
 class RiskReportPDF(FPDF):
@@ -170,7 +177,7 @@ def generate_risk_report(
     pdf.section_title("Report Information")
     pdf.key_value("Report ID:", f"FR-{report_id}")
     pdf.key_value("Generated:", timestamp)
-    pdf.key_value("Model Used:", model_name)
+    pdf.key_value("Model Used:", _sanitize(model_name))
 
     # ── 2. Prediction Summary ──
     pdf.section_title("Prediction Summary")
@@ -213,7 +220,7 @@ def generate_risk_report(
         for name, vote in per_model_votes.items():
             color = RiskReportPDF.RED if vote == 1 else RiskReportPDF.GREEN
             pdf.set_text_color(*RiskReportPDF.WHITE)
-            pdf.cell(55, 6, name)
+            pdf.cell(55, 6, _sanitize(name))
             pdf.set_text_color(*color)
             pdf.cell(30, 6, "FRAUD" if vote == 1 else "SAFE")
             pdf.set_text_color(*RiskReportPDF.WHITE)
@@ -232,10 +239,8 @@ def generate_risk_report(
     pdf.set_text_color(*RiskReportPDF.WHITE)
 
     for i, reason in enumerate(reasons[:5], 1):
-        # Strip markdown bold markers for PDF
-        clean = reason.replace("**", "").replace("⬆️", "[UP]").replace("⬇️", "[DOWN]")
-        clean = clean.replace("💰", "[AMOUNT]").replace("🕐", "[TIME]")
-        clean = clean.replace("🔬", "[PATTERN]").replace("📊", "[METRIC]")
+        # Strip markdown bold markers and any emoji for PDF
+        clean = _sanitize(reason.replace("**", ""))
         pdf.multi_cell(0, 5, f"{i}. {clean}")
         pdf.ln(1)
 
@@ -330,4 +335,4 @@ def generate_risk_report(
         pdf.ln()
 
     # Return PDF as bytes
-    return pdf.output()
+    return bytes(pdf.output())

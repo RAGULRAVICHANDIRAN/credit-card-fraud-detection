@@ -18,6 +18,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import joblib
 import time
+import datetime
 
 from dashboard.report_generator import generate_risk_report, _find_similar_transactions
 
@@ -997,107 +998,713 @@ elif page == "🔐 2FA Simulator":
 
 
 # ══════════════════════════════════════════════
-# PAGE 6 — Live Monitor
+# PAGE 6 — Live Monitor (ATM Machine App)
 # ══════════════════════════════════════════════
 
 elif page == "⚡ Live Monitor":
     st.markdown('<div class="page-title">⚡ Live Fraud Monitor</div>', unsafe_allow_html=True)
-    st.markdown('<div class="page-subtitle">Simulated real-time transaction stream with fraud detection</div>', unsafe_allow_html=True)
+    st.markdown('<div class="page-subtitle">Interactive ATM simulation with real-time fraud detection</div>', unsafe_allow_html=True)
+
+    # ── ATM-specific CSS ──
+    st.markdown("""
+    <style>
+    /* ── ATM Machine Container ── */
+    .atm-machine {
+        background: linear-gradient(145deg, #1a1a3e 0%, #0d0d2b 50%, #1a1040 100%);
+        border: 2px solid rgba(139, 92, 246, 0.3);
+        border-radius: 30px;
+        padding: 40px 30px;
+        max-width: 520px;
+        margin: 20px auto;
+        box-shadow:
+            0 0 60px rgba(139, 92, 246, 0.15),
+            0 30px 80px rgba(0, 0, 0, 0.5),
+            inset 0 1px 0 rgba(255, 255, 255, 0.05);
+        position: relative;
+        overflow: hidden;
+    }
+    .atm-machine::before {
+        content: '';
+        position: absolute;
+        top: -2px;
+        left: -2px;
+        right: -2px;
+        bottom: -2px;
+        background: linear-gradient(45deg, #7c3aed, #f472b6, #7c3aed, #818cf8);
+        border-radius: 31px;
+        z-index: -1;
+        opacity: 0.4;
+        animation: borderGlow 4s ease-in-out infinite;
+    }
+    @keyframes borderGlow {
+        0%, 100% { opacity: 0.3; }
+        50% { opacity: 0.6; }
+    }
+
+    /* ── ATM Screen ── */
+    .atm-screen {
+        background: linear-gradient(135deg, #0a1628 0%, #0f1d33 100%);
+        border: 2px solid rgba(56, 189, 248, 0.2);
+        border-radius: 16px;
+        padding: 30px 24px;
+        margin-bottom: 24px;
+        min-height: 180px;
+        box-shadow:
+            inset 0 0 30px rgba(0, 0, 0, 0.5),
+            0 0 20px rgba(56, 189, 248, 0.1);
+        position: relative;
+        overflow: hidden;
+    }
+    .atm-screen::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 1px;
+        background: linear-gradient(90deg, transparent, rgba(56, 189, 248, 0.5), transparent);
+    }
+    .atm-screen-title {
+        font-size: 0.75rem;
+        color: rgba(56, 189, 248, 0.7);
+        text-transform: uppercase;
+        letter-spacing: 3px;
+        margin-bottom: 16px;
+        font-weight: 600;
+    }
+    .atm-screen-main {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #e0f0ff;
+        text-align: center;
+        margin: 12px 0;
+    }
+    .atm-screen-sub {
+        font-size: 0.9rem;
+        color: rgba(200, 220, 255, 0.6);
+        text-align: center;
+    }
+
+    /* ── Card Slot ── */
+    .atm-card-slot {
+        background: linear-gradient(135deg, #0a0a1a, #151530);
+        border: 1px solid rgba(139, 92, 246, 0.2);
+        border-radius: 8px;
+        height: 12px;
+        width: 65%;
+        margin: 0 auto 20px;
+        box-shadow: inset 0 2px 6px rgba(0,0,0,0.6);
+        position: relative;
+        overflow: hidden;
+    }
+    .atm-card-slot::after {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: 0;
+        right: 0;
+        height: 1px;
+        background: rgba(139, 92, 246, 0.3);
+    }
+
+    /* ── Keypad ── */
+    .atm-keypad {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+        max-width: 280px;
+        margin: 0 auto;
+        padding: 16px;
+    }
+    .atm-key {
+        background: linear-gradient(135deg, rgba(30, 30, 60, 0.9), rgba(20, 20, 50, 0.9));
+        border: 1px solid rgba(139, 92, 246, 0.15);
+        border-radius: 12px;
+        padding: 14px 8px;
+        text-align: center;
+        font-size: 1.2rem;
+        font-weight: 700;
+        color: #c0c0e0;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+    .atm-key:hover {
+        background: linear-gradient(135deg, rgba(139, 92, 246, 0.3), rgba(99, 102, 241, 0.3));
+        border-color: rgba(139, 92, 246, 0.5);
+        transform: scale(1.05);
+        box-shadow: 0 4px 15px rgba(139, 92, 246, 0.2);
+    }
+    .atm-key-action {
+        background: linear-gradient(135deg, rgba(139, 92, 246, 0.4), rgba(99, 102, 241, 0.3));
+        color: #c084fc;
+        font-size: 0.85rem;
+    }
+    .atm-key-cancel {
+        background: linear-gradient(135deg, rgba(239, 68, 68, 0.3), rgba(220, 38, 38, 0.2));
+        color: #fca5a5;
+        font-size: 0.85rem;
+    }
+    .atm-key-enter {
+        background: linear-gradient(135deg, rgba(34, 197, 94, 0.3), rgba(22, 163, 74, 0.2));
+        color: #86efac;
+        font-size: 0.85rem;
+    }
+
+    /* ── ATM Logo / Brand ── */
+    .atm-brand {
+        text-align: center;
+        margin-bottom: 20px;
+    }
+    .atm-brand-name {
+        font-size: 1.3rem;
+        font-weight: 900;
+        background: linear-gradient(135deg, #818cf8, #c084fc);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        letter-spacing: 4px;
+    }
+    .atm-brand-sub {
+        font-size: 0.65rem;
+        color: rgba(200, 200, 255, 0.4);
+        letter-spacing: 2px;
+        text-transform: uppercase;
+    }
+
+    /* ── Receipt ── */
+    .atm-receipt {
+        background: linear-gradient(180deg, #fefce8 0%, #fef9c3 100%);
+        border-radius: 4px;
+        padding: 24px 20px;
+        margin: 16px auto;
+        max-width: 360px;
+        font-family: 'Courier New', monospace;
+        color: #1a1a2e;
+        box-shadow: 0 8px 30px rgba(0,0,0,0.3);
+        position: relative;
+    }
+    .atm-receipt::before {
+        content: '';
+        position: absolute;
+        bottom: -8px;
+        left: 0;
+        right: 0;
+        height: 8px;
+        background: repeating-linear-gradient(
+            135deg,
+            transparent,
+            transparent 4px,
+            #fef9c3 4px,
+            #fef9c3 8px
+        );
+    }
+    .receipt-header {
+        text-align: center;
+        font-weight: bold;
+        font-size: 1rem;
+        border-bottom: 1px dashed #94a3b8;
+        padding-bottom: 10px;
+        margin-bottom: 10px;
+    }
+    .receipt-line {
+        display: flex;
+        justify-content: space-between;
+        padding: 3px 0;
+        font-size: 0.8rem;
+    }
+    .receipt-footer {
+        text-align: center;
+        font-size: 0.7rem;
+        color: #64748b;
+        margin-top: 12px;
+        border-top: 1px dashed #94a3b8;
+        padding-top: 10px;
+    }
+
+    /* ── Approved / Declined overlays ── */
+    .atm-approved {
+        background: linear-gradient(135deg, rgba(34, 197, 94, 0.15), rgba(22, 163, 74, 0.1));
+        border: 2px solid rgba(34, 197, 94, 0.4);
+        border-radius: 16px;
+        padding: 30px;
+        text-align: center;
+        animation: fadeInScale 0.5s ease-out;
+    }
+    .atm-declined {
+        background: linear-gradient(135deg, rgba(239, 68, 68, 0.15), rgba(220, 38, 38, 0.1));
+        border: 2px solid rgba(239, 68, 68, 0.4);
+        border-radius: 16px;
+        padding: 30px;
+        text-align: center;
+        animation: fadeInScale 0.5s ease-out, pulseGlow 2s ease-in-out infinite;
+    }
+
+    /* ── Transaction log ── */
+    .txn-log-item {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 16px;
+        border-bottom: 1px solid rgba(255,255,255,0.05);
+        font-size: 0.85rem;
+        animation: slideUp 0.3s ease-out;
+    }
+    .txn-log-item:last-child { border-bottom: none; }
+    .txn-dot-ok {
+        width: 8px; height: 8px; border-radius: 50%;
+        background: #34d399; box-shadow: 0 0 8px rgba(34,197,94,0.5);
+        flex-shrink: 0;
+    }
+    .txn-dot-fraud {
+        width: 8px; height: 8px; border-radius: 50%;
+        background: #f87171; box-shadow: 0 0 8px rgba(248,113,113,0.5);
+        flex-shrink: 0;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
     df = load_dataset_sample(n=5000)
 
     if df.empty:
-        st.warning("No data available.")
+        st.warning("No data available. Run `python main.py preprocess` first.")
     else:
-        if st.button("▶️ Start Live Stream", type="primary", use_container_width=True):
-            # Stats containers
-            stat_cols = st.columns(4)
-            total_ph = stat_cols[0].empty()
-            legit_ph = stat_cols[1].empty()
-            fraud_ph = stat_cols[2].empty()
-            rate_ph = stat_cols[3].empty()
+        atm_tab, stream_tab = st.tabs(["🏧 ATM Simulator", "📡 Live Stream"])
 
-            st.markdown('<div class="glow-divider"></div>', unsafe_allow_html=True)
+        # ────────────────────────────────────────
+        #  TAB 1: ATM MACHINE SIMULATOR
+        # ────────────────────────────────────────
+        with atm_tab:
+            # Initialize session state
+            if "atm_history" not in st.session_state:
+                st.session_state.atm_history = []
 
-            chart_ph = st.empty()
-            feed_ph = st.empty()
+            # Load a model for fraud detection
+            _atm_model = None
+            _atm_model_name = "N/A"
+            for _m_key in ["xgboost", "random_forest", "lightgbm", "naive_bayes"]:
+                _smote_path = MODELS_DIR / f"{DATASET_NAME}_smote_{_m_key}.joblib"
+                if _smote_path.exists():
+                    _atm_model = joblib.load(_smote_path)
+                    _atm_model_name = _m_key.replace("_", " ").title()
+                    break
+                _others = list(MODELS_DIR.glob(f"*_{_m_key}.joblib"))
+                if _others:
+                    _atm_model = joblib.load(_others[0])
+                    _atm_model_name = _m_key.replace("_", " ").title()
+                    break
 
-            # Simulate stream
-            np.random.seed(RANDOM_SEED)
-            total, frauds, legits = 0, 0, 0
-            fraud_times = []
-            feed_items = []
+            feature_cols = [c for c in df.columns if c != "target"]
 
-            n_stream = min(200, len(df))
-            indices = np.random.choice(len(df), n_stream, replace=False)
+            # ── Layout: ATM on left, controls on right ──
+            atm_col, ctrl_col = st.columns([5, 5])
 
-            for i, idx in enumerate(indices):
-                row = df.iloc[idx]
-                is_fraud = int(row["target"])
-                amount = row["Amount"]
+            with ctrl_col:
+                st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+                st.markdown("### 🏧 Transaction Setup")
 
-                total += 1
-                if is_fraud:
-                    frauds += 1
-                else:
-                    legits += 1
+                # Card number (simulated)
+                card_num = st.text_input(
+                    "💳 Card Number",
+                    value="4532 •••• •••• 7891",
+                    help="Simulated card number",
+                    key="atm_card",
+                )
 
-                fraud_times.append({"step": i, "cumulative_fraud": frauds, "total": total,
-                                    "fraud_rate": frauds/total*100})
+                # PIN (simulated)
+                pin_input = st.text_input(
+                    "🔑 PIN",
+                    type="password",
+                    max_chars=4,
+                    help="Enter any 4-digit PIN",
+                    key="atm_pin",
+                )
 
-                # Feed
-                status = "🚨 FRAUD" if is_fraud else "✅ OK"
-                badge = "badge-fraud" if is_fraud else "badge-safe"
-                feed_items.insert(0, f'<span class="status-badge {badge}">{status}</span>'
-                                  f' Txn #{total:04d} — Amount: {amount:.2f}')
+                # Transaction type
+                txn_type = st.selectbox(
+                    "📋 Transaction Type",
+                    ["💵 Cash Withdrawal", "💰 Deposit", "💸 Fund Transfer", "📊 Balance Inquiry"],
+                    key="atm_txn_type",
+                )
 
-                # Update every 5 txns for speed
-                if i % 5 == 0 or i == n_stream - 1:
-                    rate = frauds/total*100
-
-                    total_ph.markdown(f"""<div class="metric-card">
-                        <div class="metric-icon">📦</div>
-                        <div class="metric-value">{total}</div>
-                        <div class="metric-label">Processed</div></div>""",
-                        unsafe_allow_html=True)
-                    legit_ph.markdown(f"""<div class="metric-card">
-                        <div class="metric-icon">✅</div>
-                        <div class="metric-value">{legits}</div>
-                        <div class="metric-label">Legitimate</div></div>""",
-                        unsafe_allow_html=True)
-                    fraud_ph.markdown(f"""<div class="metric-card">
-                        <div class="metric-icon">🚨</div>
-                        <div class="metric-value">{frauds}</div>
-                        <div class="metric-label">Fraudulent</div></div>""",
-                        unsafe_allow_html=True)
-                    rate_ph.markdown(f"""<div class="metric-card">
-                        <div class="metric-icon">📊</div>
-                        <div class="metric-value">{rate:.2f}%</div>
-                        <div class="metric-label">Fraud Rate</div></div>""",
-                        unsafe_allow_html=True)
-
-                    # Cumulative chart
-                    ft_df = pd.DataFrame(fraud_times)
-                    fig = go.Figure()
-                    fig.add_trace(go.Scatter(
-                        x=ft_df["step"], y=ft_df["fraud_rate"],
-                        mode="lines", name="Fraud Rate %",
-                        line=dict(color="#f472b6", width=3),
-                        fill="tozeroy",
-                        fillcolor="rgba(244,114,182,0.15)",
-                    ))
-                    fig = styled_plotly(fig, height=300)
-                    fig.update_layout(
-                        title="Cumulative Fraud Rate",
-                        xaxis_title="Transactions", yaxis_title="Fraud Rate %",
-                        yaxis=dict(range=[0, max(rate * 3, 1)]),
+                # Amount
+                if txn_type != "📊 Balance Inquiry":
+                    amount = st.number_input(
+                        "💲 Amount ($)",
+                        min_value=1.0,
+                        max_value=50000.0,
+                        value=250.0,
+                        step=50.0,
+                        key="atm_amount",
                     )
-                    chart_ph.plotly_chart(fig, use_container_width=True)
+                else:
+                    amount = 0.0
 
-                    # Feed (last 10)
-                    feed_html = '<div class="glass-card">' + "<br>".join(feed_items[:10]) + "</div>"
-                    feed_ph.markdown(feed_html, unsafe_allow_html=True)
+                # Advanced: allow tweaking some features
+                with st.expander("⚙️ Advanced — Feature Override"):
+                    st.caption("Override V-features (PCA components) to simulate different transaction patterns.")
+                    adv_cols = st.columns(3)
+                    v_overrides = {}
+                    for vi in range(1, 7):
+                        with adv_cols[(vi - 1) % 3]:
+                            v_overrides[f"V{vi}"] = st.number_input(
+                                f"V{vi}", value=0.0, format="%.3f", key=f"atm_v{vi}"
+                            )
 
-                    time.sleep(0.05)
+                process_btn = st.button(
+                    "🔄 Process Transaction",
+                    type="primary",
+                    use_container_width=True,
+                    key="atm_process",
+                )
+                st.markdown('</div>', unsafe_allow_html=True)
 
-            st.success(f"✅ Stream complete! Processed {total} transactions — {frauds} fraud detected.")
+            with atm_col:
+                # ── ATM Machine Visual ──
+                st.markdown("""
+                <div class="atm-machine">
+                    <div class="atm-brand">
+                        <div class="atm-brand-name">FRAUDSHIELD</div>
+                        <div class="atm-brand-sub">Secure Banking Terminal</div>
+                    </div>
+                    <div class="atm-card-slot"></div>
+                """, unsafe_allow_html=True)
+
+                atm_screen = st.empty()
+
+                # Default screen
+                if not process_btn:
+                    atm_screen.markdown("""
+                    <div class="atm-screen">
+                        <div class="atm-screen-title">FraudShield Secure ATM</div>
+                        <div class="atm-screen-main">Welcome</div>
+                        <div class="atm-screen-sub">Insert your card and enter PIN to begin</div>
+                        <div style="text-align:center; margin-top:18px; font-size:2rem;">🏧</div>
+                        <div style="text-align:center; margin-top:8px;">
+                            <span style="display:inline-block; width:8px; height:8px; border-radius:50%;
+                                         background:#34d399; margin:0 3px; animation:pulseGlow 2s infinite;"></span>
+                            <span style="display:inline-block; width:8px; height:8px; border-radius:50%;
+                                         background:#818cf8; margin:0 3px;"></span>
+                            <span style="display:inline-block; width:8px; height:8px; border-radius:50%;
+                                         background:#f472b6; margin:0 3px;"></span>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                # ── Decorative keypad ──
+                st.markdown("""
+                    <div class="atm-keypad">
+                        <div class="atm-key">1</div><div class="atm-key">2</div><div class="atm-key">3</div>
+                        <div class="atm-key">4</div><div class="atm-key">5</div><div class="atm-key">6</div>
+                        <div class="atm-key">7</div><div class="atm-key">8</div><div class="atm-key">9</div>
+                        <div class="atm-key atm-key-cancel">CANCEL</div>
+                        <div class="atm-key">0</div>
+                        <div class="atm-key atm-key-enter">ENTER</div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            # ── Process Transaction ──
+            if process_btn:
+                if len(pin_input) != 4 or not pin_input.isdigit():
+                    atm_screen.markdown("""
+                    <div class="atm-screen">
+                        <div class="atm-screen-title">Error</div>
+                        <div style="text-align:center; font-size:2.5rem; margin:10px 0;">⚠️</div>
+                        <div class="atm-screen-main" style="color:#fbbf24; font-size:1.2rem;">
+                            INVALID PIN
+                        </div>
+                        <div class="atm-screen-sub">Please enter a valid 4-digit PIN</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    # Show processing animation
+                    with st.spinner(""):
+                        atm_screen.markdown(f"""
+                        <div class="atm-screen">
+                            <div class="atm-screen-title">Processing</div>
+                            <div style="text-align:center; font-size:2rem; margin:12px 0;
+                                        animation: shimmer 1s linear infinite;">⏳</div>
+                            <div class="atm-screen-main" style="font-size:1.1rem;">
+                                Verifying transaction...
+                            </div>
+                            <div class="atm-screen-sub">
+                                {txn_type}<br>Amount: ${amount:,.2f}
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        time.sleep(1.5)
+
+                    # ── Build feature vector from real data pattern ──
+                    rand_idx = np.random.randint(0, len(df))
+                    sample_row = df.iloc[rand_idx]
+                    input_vals = {f: sample_row[f] for f in feature_cols}
+                    input_vals["Amount"] = amount
+                    # Apply V-feature overrides
+                    for vk, vv in v_overrides.items():
+                        if vk in input_vals and vv != 0.0:
+                            input_vals[vk] = vv
+
+                    # ── Run fraud detection ──
+                    input_df = pd.DataFrame([input_vals])
+                    if _atm_model is not None:
+                        pred = int(_atm_model.predict(input_df)[0])
+                        if hasattr(_atm_model, "predict_proba"):
+                            prob = _atm_model.predict_proba(input_df)[0]
+                            confidence = prob[1] if pred == 1 else prob[0]
+                            fraud_prob = prob[1] * 100
+                        else:
+                            confidence = None
+                            fraud_prob = 100.0 if pred == 1 else 0.0
+                    else:
+                        # Fallback: use the actual label
+                        pred = int(sample_row.get("target", 0))
+                        confidence = None
+                        fraud_prob = 100.0 if pred == 1 else 0.0
+
+                    txn_id = f"TXN-{int(time.time())}-{np.random.randint(1000, 9999)}"
+                    timestamp_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+                    import datetime as _dt
+
+                    # Store in history
+                    st.session_state.atm_history.insert(0, {
+                        "id": txn_id,
+                        "time": timestamp_str,
+                        "type": txn_type,
+                        "amount": amount,
+                        "status": "DECLINED" if pred == 1 else "APPROVED",
+                        "fraud_prob": fraud_prob,
+                        "card": card_num[-4:] if len(card_num) >= 4 else "****",
+                    })
+
+                    # ── Show result on ATM screen ──
+                    if pred == 1:
+                        # FRAUD — DECLINED
+                        conf_str = f"{confidence*100:.1f}%" if confidence else "N/A"
+                        atm_screen.markdown(f"""
+                        <div class="atm-screen" style="border-color: rgba(239, 68, 68, 0.4);">
+                            <div class="atm-screen-title" style="color: rgba(239, 68, 68, 0.8);">
+                                ⚠ Security Alert
+                            </div>
+                            <div style="text-align:center; font-size:3rem; margin:8px 0;
+                                        animation: pulseGlow 1.5s ease-in-out infinite;">🚫</div>
+                            <div class="atm-screen-main" style="color:#fca5a5; font-size:1.4rem;">
+                                TRANSACTION DECLINED
+                            </div>
+                            <div class="atm-screen-sub" style="color:rgba(252,165,165,0.7);">
+                                Suspicious activity detected<br>
+                                Fraud probability: {fraud_prob:.1f}%<br>
+                                <span style="font-size:0.75rem; margin-top:8px; display:block;">
+                                    Please contact your bank immediately
+                                </span>
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+
+                        st.markdown(f"""
+                        <div class="atm-declined">
+                            <div style="font-size:2rem; margin-bottom:10px;">🚨</div>
+                            <div style="font-size:1.4rem; font-weight:800; color:#fca5a5;">
+                                FRAUD ALERT — Transaction Blocked
+                            </div>
+                            <div style="color:rgba(252,165,165,0.7); margin-top:8px;">
+                                Model: {_atm_model_name} | Confidence: {conf_str} |
+                                Risk Score: {fraud_prob:.1f}%
+                            </div>
+                            <div style="margin-top:12px;">
+                                <span class="status-badge badge-fraud">HIGH RISK</span>
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    else:
+                        # LEGITIMATE — APPROVED
+                        conf_str = f"{confidence*100:.1f}%" if confidence else "N/A"
+                        atm_screen.markdown(f"""
+                        <div class="atm-screen" style="border-color: rgba(34, 197, 94, 0.4);">
+                            <div class="atm-screen-title" style="color: rgba(34, 197, 94, 0.8);">
+                                Transaction Complete
+                            </div>
+                            <div style="text-align:center; font-size:3rem; margin:8px 0;">✅</div>
+                            <div class="atm-screen-main" style="color:#86efac; font-size:1.4rem;">
+                                APPROVED
+                            </div>
+                            <div class="atm-screen-sub" style="color:rgba(134,239,172,0.7);">
+                                {txn_type}<br>
+                                Amount: ${amount:,.2f}<br>
+                                <span style="font-size:0.75rem; margin-top:8px; display:block;">
+                                    Please take your card and receipt
+                                </span>
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+
+                        st.markdown(f"""
+                        <div class="atm-approved">
+                            <div style="font-size:2rem; margin-bottom:10px;">✅</div>
+                            <div style="font-size:1.4rem; font-weight:800; color:#86efac;">
+                                Transaction Approved
+                            </div>
+                            <div style="color:rgba(134,239,172,0.7); margin-top:8px;">
+                                Model: {_atm_model_name} | Confidence: {conf_str} |
+                                Risk Score: {fraud_prob:.1f}%
+                            </div>
+                            <div style="margin-top:12px;">
+                                <span class="status-badge badge-safe">LOW RISK</span>
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+
+                    # ── Receipt ──
+                    st.markdown('<div class="glow-divider"></div>', unsafe_allow_html=True)
+                    st.markdown("### 🧾 Transaction Receipt")
+
+                    status_label = "DECLINED" if pred == 1 else "APPROVED"
+                    status_color = "#dc2626" if pred == 1 else "#16a34a"
+                    st.markdown(f"""
+                    <div class="atm-receipt">
+                        <div class="receipt-header">
+                            FRAUDSHIELD BANK<br>
+                            <span style="font-size:0.7rem; font-weight:normal;">Secure Banking Terminal</span>
+                        </div>
+                        <div class="receipt-line"><span>Date:</span><span>{timestamp_str}</span></div>
+                        <div class="receipt-line"><span>Txn ID:</span><span>{txn_id}</span></div>
+                        <div class="receipt-line"><span>Card:</span><span>****{card_num[-4:] if len(card_num) >= 4 else '****'}</span></div>
+                        <div class="receipt-line"><span>Type:</span><span>{txn_type}</span></div>
+                        <div class="receipt-line"><span>Amount:</span><span>${amount:,.2f}</span></div>
+                        <div style="margin:10px 0; border-top:1px dashed #94a3b8;"></div>
+                        <div class="receipt-line">
+                            <span style="font-weight:bold;">Status:</span>
+                            <span style="font-weight:bold; color:{status_color};">{status_label}</span>
+                        </div>
+                        <div class="receipt-line"><span>Risk Score:</span><span>{fraud_prob:.1f}%</span></div>
+                        <div class="receipt-line"><span>AI Model:</span><span>{_atm_model_name}</span></div>
+                        <div class="receipt-footer">
+                            Thank you for banking with FraudShield<br>
+                            Powered by AI Fraud Detection
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+            # ── Transaction History ──
+            if st.session_state.atm_history:
+                st.markdown('<div class="glow-divider"></div>', unsafe_allow_html=True)
+                st.markdown("### 📜 Transaction History")
+                st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+
+                for txn in st.session_state.atm_history[:15]:
+                    dot_class = "txn-dot-fraud" if txn["status"] == "DECLINED" else "txn-dot-ok"
+                    s_badge = "badge-fraud" if txn["status"] == "DECLINED" else "badge-safe"
+                    s_label = txn["status"]
+                    st.markdown(f"""
+                    <div class="txn-log-item">
+                        <div class="{dot_class}"></div>
+                        <div style="flex:1;">
+                            <span style="color:#c0c0e0; font-weight:600;">{txn['id']}</span>
+                            <span style="color:rgba(200,200,255,0.4); font-size:0.75rem; margin-left:8px;">
+                                {txn['time']}
+                            </span>
+                        </div>
+                        <div style="color:#a0a0c0; font-size:0.85rem;">{txn['type']}</div>
+                        <div style="color:#e0e0f0; font-weight:700; min-width:80px; text-align:right;">
+                            ${txn['amount']:,.2f}
+                        </div>
+                        <div><span class="status-badge {s_badge}">{s_label}</span></div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                st.markdown('</div>', unsafe_allow_html=True)
+
+                if st.button("🗑️ Clear History", key="atm_clear"):
+                    st.session_state.atm_history = []
+                    st.rerun()
+
+        # ────────────────────────────────────────
+        #  TAB 2: LIVE STREAM (original)
+        # ────────────────────────────────────────
+        with stream_tab:
+            if st.button("▶️ Start Live Stream", type="primary", use_container_width=True, key="stream_btn"):
+                stat_cols = st.columns(4)
+                total_ph = stat_cols[0].empty()
+                legit_ph = stat_cols[1].empty()
+                fraud_ph = stat_cols[2].empty()
+                rate_ph = stat_cols[3].empty()
+
+                st.markdown('<div class="glow-divider"></div>', unsafe_allow_html=True)
+
+                chart_ph = st.empty()
+                feed_ph = st.empty()
+
+                np.random.seed(RANDOM_SEED)
+                total, frauds, legits = 0, 0, 0
+                fraud_times = []
+                feed_items = []
+
+                n_stream = min(200, len(df))
+                indices = np.random.choice(len(df), n_stream, replace=False)
+
+                for i, idx in enumerate(indices):
+                    row = df.iloc[idx]
+                    is_fraud = int(row["target"])
+                    amount_val = row["Amount"]
+
+                    total += 1
+                    if is_fraud:
+                        frauds += 1
+                    else:
+                        legits += 1
+
+                    fraud_times.append({"step": i, "cumulative_fraud": frauds, "total": total,
+                                        "fraud_rate": frauds / total * 100})
+
+                    status = "FRAUD" if is_fraud else "OK"
+                    badge = "badge-fraud" if is_fraud else "badge-safe"
+                    feed_items.insert(0,
+                        f'<span class="status-badge {badge}">{status}</span>'
+                        f' Txn #{total:04d} — ${amount_val:.2f}')
+
+                    if i % 5 == 0 or i == n_stream - 1:
+                        rate = frauds / total * 100
+
+                        total_ph.markdown(f"""<div class="metric-card">
+                            <div class="metric-icon">📦</div>
+                            <div class="metric-value">{total}</div>
+                            <div class="metric-label">Processed</div></div>""",
+                            unsafe_allow_html=True)
+                        legit_ph.markdown(f"""<div class="metric-card">
+                            <div class="metric-icon">✅</div>
+                            <div class="metric-value">{legits}</div>
+                            <div class="metric-label">Legitimate</div></div>""",
+                            unsafe_allow_html=True)
+                        fraud_ph.markdown(f"""<div class="metric-card">
+                            <div class="metric-icon">🚨</div>
+                            <div class="metric-value">{frauds}</div>
+                            <div class="metric-label">Fraudulent</div></div>""",
+                            unsafe_allow_html=True)
+                        rate_ph.markdown(f"""<div class="metric-card">
+                            <div class="metric-icon">📊</div>
+                            <div class="metric-value">{rate:.2f}%</div>
+                            <div class="metric-label">Fraud Rate</div></div>""",
+                            unsafe_allow_html=True)
+
+                        ft_df = pd.DataFrame(fraud_times)
+                        fig = go.Figure()
+                        fig.add_trace(go.Scatter(
+                            x=ft_df["step"], y=ft_df["fraud_rate"],
+                            mode="lines", name="Fraud Rate %",
+                            line=dict(color="#f472b6", width=3),
+                            fill="tozeroy",
+                            fillcolor="rgba(244,114,182,0.15)",
+                        ))
+                        fig = styled_plotly(fig, height=300)
+                        fig.update_layout(
+                            title="Cumulative Fraud Rate",
+                            xaxis_title="Transactions", yaxis_title="Fraud Rate %",
+                            yaxis=dict(range=[0, max(rate * 3, 1)]),
+                        )
+                        chart_ph.plotly_chart(fig, use_container_width=True)
+
+                        feed_html = '<div class="glass-card">' + "<br>".join(feed_items[:10]) + "</div>"
+                        feed_ph.markdown(feed_html, unsafe_allow_html=True)
+
+                        time.sleep(0.05)
+
+                st.success(f"Stream complete! Processed {total} transactions — {frauds} fraud detected.")
