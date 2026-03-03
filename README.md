@@ -71,6 +71,8 @@ credit-card-fraud-detection/
 ### 2. Sparkov Simulated
 - **Source**: [Kaggle — Fraud Detection](https://www.kaggle.com/datasets/kartik2112/fraud-detection)
 - ~1.85M simulated transactions with demographics, merchant info, temporal data
+OPTIONAL TO USE SINGLE OR MULTIPLE DATASET , 
+TO TRAIN AND TEST USE MULTIPLE DATASET MODEL IF YOU WANT ONLY TRAINING THEN USE SINGLE MODEL 
 
 ### Download Instructions
 
@@ -81,7 +83,7 @@ credit-card-fraud-detection/
    kaggle datasets download mlg-ulb/creditcardfraud -p data/raw/ --unzip
    kaggle datasets download kartik2112/fraud-detection -p data/raw/ --unzip
    ```
-
+EXTRACT IT AND PLACE INTO THE DATA FOLDER AS PER RUNNING RECOMMENDATION 
 2. **Manual**: Visit the links above, download, and extract CSVs into `data/raw/`.
 
 ---
@@ -215,4 +217,5 @@ streamlit run dashboard/app.py
 
 ## License
 RAGUL RAVICHANDIRAN
+FINAL YEAR PROJECT (DEPARTMENT OF AI&DS)
 This project is for academic / educational use.
