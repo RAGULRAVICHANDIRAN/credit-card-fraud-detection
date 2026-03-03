@@ -1,0 +1,49 @@
+# Data files
+data/raw/
+data/processed/
+data/external/
+*.csv
+*.parquet
+
+# Saved models
+models_saved/
+*.pkl
+*.h5
+*.pt
+*.pth
+*.joblib
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# Virtual environments
+venv/
+env/
+.env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Reports (generated)
+reports/figures/*.png
+reports/figures/*.jpg
+reports/figures/*.svg
+
+# Logs
+*.log
