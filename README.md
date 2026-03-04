@@ -1,5 +1,5 @@
 # 🛡️ Credit Card Fraud Detection Using Ensemble Learning & Deep Learning
-AN PROJECT BY  RAGUL RAVICHANDIRAN
+AN PROJECT BY  RAGUL RAVICHANDIRAN and by its team 
 
 A comprehensive final-year project that replicates existing ensemble-learning research **and** proposes novel deep-learning and explainability enhancements for identifying fraudulent credit-card transactions.
 
@@ -68,7 +68,7 @@ credit-card-fraud-detection/
 - 284,807 transactions · 492 fraudulent (0.172%)
 - 28 PCA-transformed features + Time + Amount
 
-### 2. Sparkov Simulated
+### 2. Sparkov Simulated(optional for only if you dont want any ml )
 - **Source**: [Kaggle — Fraud Detection](https://www.kaggle.com/datasets/kartik2112/fraud-detection)
 - ~1.85M simulated transactions with demographics, merchant info, temporal data
 OPTIONAL TO USE SINGLE OR MULTIPLE DATASET , 
