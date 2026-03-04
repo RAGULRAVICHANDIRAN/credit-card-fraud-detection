@@ -354,7 +354,8 @@ st.sidebar.markdown("---")
 page = st.sidebar.radio(
     "Navigate",
     ["🏠 Dashboard", "📊 Data Explorer", "📈 Model Arena",
-     "🔮 Predict & Explain", "🔐 2FA Simulator", "⚡ Live Monitor"],
+     "🔮 Predict & Explain", "🔐 2FA Simulator", "⚡ Live Monitor",
+     "🛡️ Admin Panel"],
     label_visibility="collapsed",
 )
 st.sidebar.markdown("---")
@@ -1063,85 +1064,301 @@ elif page == "🔮 Predict & Explain":
 
 
 # ══════════════════════════════════════════════
-# PAGE 5 — 2FA / MFA Simulator
+# PAGE 5 — 2FA / MFA Simulator (OTP-based)
 # ══════════════════════════════════════════════
 
 elif page == "🔐 2FA Simulator":
-    st.markdown('<div class="page-title">🔐 2FA / MFA Simulator</div>', unsafe_allow_html=True)
-    st.markdown('<div class="page-subtitle">Simulate risk-based multi-factor authentication on transactions</div>', unsafe_allow_html=True)
+    st.markdown('<div class="page-title">🔐 2FA Verification</div>', unsafe_allow_html=True)
+    st.markdown('<div class="page-subtitle">High-value transactions require OTP verification sent to your phone or email</div>', unsafe_allow_html=True)
 
+    import random, hashlib
+
+    # ── Session state for OTP flow ──
+    if "otp_code" not in st.session_state:
+        st.session_state.otp_code = None
+    if "otp_verified" not in st.session_state:
+        st.session_state.otp_verified = False
+    if "otp_channel" not in st.session_state:
+        st.session_state.otp_channel = None
+    if "otp_txn_amount" not in st.session_state:
+        st.session_state.otp_txn_amount = 0.0
+    if "otp_attempts" not in st.session_state:
+        st.session_state.otp_attempts = 0
+    if "otp_history" not in st.session_state:
+        st.session_state.otp_history = []
+
+    HIGH_AMOUNT_THRESHOLD = 500.0  # dollars
+
+    # ── Step 1: Transaction Entry ──
     st.markdown('<div class="glass-card">', unsafe_allow_html=True)
-    col1, col2, col3 = st.columns(3)
-    risk_2fa = col1.slider("🔓 2FA threshold", 0.0, 1.0, 0.5, 0.05)
-    risk_mfa = col2.slider("🔒 MFA threshold", 0.0, 1.0, 0.8, 0.05)
-    n_txn = col3.number_input("📊 Transactions", 100, 10000, 1000, 100)
-    st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown("### 💳 New Transaction")
 
-    if st.button("🚀 Run Simulation", type="primary", use_container_width=True):
-        with st.spinner("⚡ Running simulation..."):
-            time.sleep(0.3)
+    tc1, tc2 = st.columns(2)
+    with tc1:
+        tfa_amount = st.number_input(
+            "💲 Transaction Amount ($)",
+            min_value=1.0, max_value=100000.0, value=250.0, step=50.0,
+            key="tfa_amount_input",
+        )
+        tfa_recipient = st.text_input("👤 Recipient", value="John Doe", key="tfa_recipient")
 
-        np.random.seed(RANDOM_SEED)
-        risk_scores = np.random.beta(2, 5, n_txn)
-        n_fraud = int(n_txn * 0.05)
-        risk_scores[:n_fraud] = np.random.beta(5, 2, n_fraud)
-        np.random.shuffle(risk_scores)
-
-        layers = np.where(
-            risk_scores < risk_2fa, "Standard",
-            np.where(risk_scores < risk_mfa, "2FA (SMS/Email)", "MFA (Biometric)"),
+    with tc2:
+        tfa_channel = st.selectbox(
+            "📱 OTP Delivery Channel",
+            ["📱 SMS (+91 •••• ••48)", "📧 Email (m••••@gmail.com)"],
+            key="tfa_channel_select",
+        )
+        tfa_txn_type = st.selectbox(
+            "📋 Transaction Type",
+            ["💸 Fund Transfer", "💵 Payment", "🛒 Online Purchase", "💰 Deposit"],
+            key="tfa_txn_type",
         )
 
-        l1 = (layers == "Standard").sum()
-        l2 = (layers == "2FA (SMS/Email)").sum()
-        l3 = (layers == "MFA (Biometric)").sum()
+    requires_2fa = tfa_amount >= HIGH_AMOUNT_THRESHOLD
 
-        # Animated metric cards
-        cols = st.columns(3)
-        for i, (icon, val, pct, label, color) in enumerate([
-            ("🟢", l1, l1/n_txn*100, "Standard Auth", "#34d399"),
-            ("🟡", l2, l2/n_txn*100, "2FA Required", "#fbbf24"),
-            ("🔴", l3, l3/n_txn*100, "MFA Required", "#f87171"),
-        ]):
-            cols[i].markdown(f"""
-                <div class="metric-card delay-{i+1}">
-                    <div class="metric-icon">{icon}</div>
-                    <div class="metric-value">{val:,}</div>
-                    <div class="metric-label">{label} ({pct:.1f}%)</div>
-                </div>
-            """, unsafe_allow_html=True)
+    # Info banner about 2FA requirement
+    if requires_2fa:
+        st.markdown(f"""
+        <div style="background:rgba(251,191,36,0.12); border:1px solid rgba(251,191,36,0.3);
+                    border-radius:12px; padding:14px 18px; margin-top:10px;">
+            <span style="font-size:1.1rem;">⚠️</span>
+            <span style="color:#fbbf24; font-weight:600;"> 2FA Required</span>
+            <span style="color:rgba(200,200,255,0.7); font-size:0.9rem;">
+                — Transactions ≥ ${HIGH_AMOUNT_THRESHOLD:,.0f} require One-Time Password verification.
+            </span>
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        st.markdown(f"""
+        <div style="background:rgba(34,197,94,0.12); border:1px solid rgba(34,197,94,0.3);
+                    border-radius:12px; padding:14px 18px; margin-top:10px;">
+            <span style="font-size:1.1rem;">✅</span>
+            <span style="color:#86efac; font-weight:600;"> Standard Authorization</span>
+            <span style="color:rgba(200,200,255,0.7); font-size:0.9rem;">
+                — Amount below ${HIGH_AMOUNT_THRESHOLD:,.0f}. No OTP needed.
+            </span>
+        </div>
+        """, unsafe_allow_html=True)
 
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # ── Initiate Transaction ──
+    if not st.session_state.otp_verified:
+        initiate_btn = st.button("🚀 Initiate Transaction", type="primary", use_container_width=True, key="tfa_initiate")
+
+        if initiate_btn:
+            if requires_2fa:
+                # Generate a 6-digit OTP
+                otp = str(random.randint(100000, 999999))
+                st.session_state.otp_code = otp
+                st.session_state.otp_verified = False
+                st.session_state.otp_channel = tfa_channel
+                st.session_state.otp_txn_amount = tfa_amount
+                st.session_state.otp_attempts = 0
+                st.rerun()
+            else:
+                # Low amount — approve directly
+                st.session_state.otp_verified = True
+                st.session_state.otp_txn_amount = tfa_amount
+                st.session_state.otp_code = None
+                st.session_state.otp_channel = None
+                st.session_state.otp_history.insert(0, {
+                    "id": f"TXN-{int(time.time())}-{random.randint(1000,9999)}",
+                    "amount": tfa_amount,
+                    "recipient": tfa_recipient,
+                    "type": tfa_txn_type,
+                    "auth": "Standard (No OTP)",
+                    "status": "✅ APPROVED",
+                    "time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                })
+                st.rerun()
+
+    # ── Step 2: OTP Entry (only for high-amount) ──
+    if st.session_state.otp_code and not st.session_state.otp_verified:
         st.markdown('<div class="glow-divider"></div>', unsafe_allow_html=True)
 
-        col1, col2 = st.columns(2)
+        channel_label = "phone" if "SMS" in (st.session_state.otp_channel or "") else "email"
+        channel_icon = "📱" if channel_label == "phone" else "📧"
 
-        with col1:
-            st.markdown('<div class="glass-card">', unsafe_allow_html=True)
-            sim_df = pd.DataFrame({"risk_score": risk_scores, "auth_layer": layers})
-            fig = go.Figure()
-            for layer, color in [("Standard", "#34d399"), ("2FA (SMS/Email)", "#fbbf24"), ("MFA (Biometric)", "#f87171")]:
-                subset = sim_df[sim_df["auth_layer"] == layer]["risk_score"]
-                fig.add_trace(go.Histogram(x=subset, name=layer, marker_color=color, opacity=0.7, nbinsx=40))
-            fig = styled_plotly(fig, height=380)
-            fig.update_layout(barmode="overlay", title="Risk Score Distribution", xaxis_title="Risk Score")
-            st.plotly_chart(fig, use_container_width=True)
-            st.markdown('</div>', unsafe_allow_html=True)
+        # OTP sent notification
+        st.markdown(f"""
+        <div style="background:rgba(99,102,241,0.12); border:1px solid rgba(99,102,241,0.3);
+                    border-radius:16px; padding:24px; text-align:center; margin:10px 0;
+                    animation: fadeInScale 0.5s ease-out;">
+            <div style="font-size:2.5rem; margin-bottom:8px;">{channel_icon}</div>
+            <div style="font-size:1.2rem; font-weight:700; color:#a5b4fc;">
+                OTP Sent to your {channel_label}!
+            </div>
+            <div style="color:rgba(200,200,255,0.6); margin-top:6px; font-size:0.9rem;">
+                A 6-digit verification code has been sent to<br>
+                <b>{st.session_state.otp_channel}</b>
+            </div>
+            <div style="margin-top:14px; background:rgba(255,255,255,0.06); border-radius:10px;
+                        padding:10px 16px; display:inline-block;">
+                <span style="color:#fbbf24; font-weight:700; font-size:0.85rem;">
+                    🔑 Demo OTP: {st.session_state.otp_code}
+                </span>
+            </div>
+            <div style="color:rgba(200,200,255,0.4); font-size:0.75rem; margin-top:8px;">
+                (In production this would only be sent to the actual device)
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
 
-        with col2:
-            st.markdown('<div class="glass-card">', unsafe_allow_html=True)
-            fig = go.Figure(go.Pie(
-                labels=["Standard", "2FA", "MFA"],
-                values=[l1, l2, l3],
-                hole=0.6,
-                marker=dict(colors=["#34d399", "#fbbf24", "#f87171"],
-                            line=dict(color="#0a0a1a", width=3)),
-                textinfo="percent+label",
-                pull=[0, 0.03, 0.06],
-            ))
-            fig = styled_plotly(fig, height=380)
-            fig.update_layout(title="Authentication Layer Split", showlegend=False)
-            st.plotly_chart(fig, use_container_width=True)
-            st.markdown('</div>', unsafe_allow_html=True)
+        # OTP input form
+        st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+        st.markdown("### 🔢 Enter Verification Code")
+
+        otp_input = st.text_input(
+            "6-Digit OTP",
+            max_chars=6,
+            placeholder="Enter the OTP sent to your device",
+            key="tfa_otp_input",
+        )
+
+        remaining = 3 - st.session_state.otp_attempts
+        if st.session_state.otp_attempts > 0:
+            st.caption(f"⚠️ Attempts remaining: **{remaining}**")
+
+        vc1, vc2 = st.columns(2)
+        with vc1:
+            verify_btn = st.button("✅ Verify OTP", type="primary", use_container_width=True, key="tfa_verify")
+        with vc2:
+            resend_btn = st.button("🔄 Resend OTP", use_container_width=True, key="tfa_resend")
+
+        if resend_btn:
+            new_otp = str(random.randint(100000, 999999))
+            st.session_state.otp_code = new_otp
+            st.session_state.otp_attempts = 0
+            st.rerun()
+
+        if verify_btn:
+            if otp_input == st.session_state.otp_code:
+                # ✅ OTP correct — approve transaction
+                st.session_state.otp_verified = True
+                st.session_state.otp_history.insert(0, {
+                    "id": f"TXN-{int(time.time())}-{random.randint(1000,9999)}",
+                    "amount": st.session_state.otp_txn_amount,
+                    "recipient": tfa_recipient,
+                    "type": tfa_txn_type,
+                    "auth": f"2FA OTP ({channel_label})",
+                    "status": "✅ APPROVED",
+                    "time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                })
+                st.rerun()
+            else:
+                st.session_state.otp_attempts += 1
+                if st.session_state.otp_attempts >= 3:
+                    # ❌ Max attempts — block transaction
+                    st.session_state.otp_history.insert(0, {
+                        "id": f"TXN-{int(time.time())}-{random.randint(1000,9999)}",
+                        "amount": st.session_state.otp_txn_amount,
+                        "recipient": tfa_recipient,
+                        "type": tfa_txn_type,
+                        "auth": f"2FA OTP ({channel_label})",
+                        "status": "🚫 BLOCKED (3 failed attempts)",
+                        "time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    })
+                    st.session_state.otp_code = None
+                    st.session_state.otp_verified = False
+                    st.rerun()
+                else:
+                    st.error(f"❌ Incorrect OTP. {3 - st.session_state.otp_attempts} attempt(s) remaining.")
+
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    # ── Step 3: Result Display ──
+    if st.session_state.otp_verified:
+        st.markdown('<div class="glow-divider"></div>', unsafe_allow_html=True)
+
+        st.markdown(f"""
+        <div style="background:rgba(34,197,94,0.12); border:2px solid rgba(34,197,94,0.35);
+                    border-radius:20px; padding:36px; text-align:center;
+                    animation: fadeInScale 0.5s ease-out;">
+            <div style="font-size:3.5rem; margin-bottom:10px;">✅</div>
+            <div style="font-size:1.8rem; font-weight:800; color:#86efac;">
+                Transaction Approved
+            </div>
+            <div style="color:rgba(134,239,172,0.7); margin-top:8px; font-size:1.05rem;">
+                ${st.session_state.otp_txn_amount:,.2f} — {'OTP Verified' if st.session_state.otp_txn_amount >= HIGH_AMOUNT_THRESHOLD else 'Standard Auth'}
+            </div>
+            <div style="margin-top:14px;">
+                <span class="status-badge badge-safe">AUTHENTICATED</span>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        if st.button("🔄 New Transaction", use_container_width=True, key="tfa_new"):
+            st.session_state.otp_code = None
+            st.session_state.otp_verified = False
+            st.session_state.otp_channel = None
+            st.session_state.otp_txn_amount = 0.0
+            st.session_state.otp_attempts = 0
+            st.rerun()
+
+    # ── Blocked message (max attempts reached) ──
+    if (not st.session_state.otp_code and not st.session_state.otp_verified
+            and st.session_state.otp_history
+            and "BLOCKED" in st.session_state.otp_history[0].get("status", "")):
+        st.markdown('<div class="glow-divider"></div>', unsafe_allow_html=True)
+        st.markdown(f"""
+        <div style="background:rgba(239,68,68,0.12); border:2px solid rgba(239,68,68,0.35);
+                    border-radius:20px; padding:36px; text-align:center;
+                    animation: fadeInScale 0.5s ease-out, pulseGlow 2s ease-in-out infinite;">
+            <div style="font-size:3.5rem; margin-bottom:10px;">🚫</div>
+            <div style="font-size:1.8rem; font-weight:800; color:#fca5a5;">
+                Transaction Blocked
+            </div>
+            <div style="color:rgba(252,165,165,0.7); margin-top:8px; font-size:1.05rem;">
+                Maximum OTP attempts exceeded. Contact your bank.
+            </div>
+            <div style="margin-top:14px;">
+                <span class="status-badge badge-fraud">SECURITY HOLD</span>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        if st.button("🔄 Try Again", use_container_width=True, key="tfa_retry"):
+            st.session_state.otp_code = None
+            st.session_state.otp_verified = False
+            st.session_state.otp_channel = None
+            st.session_state.otp_txn_amount = 0.0
+            st.session_state.otp_attempts = 0
+            st.rerun()
+
+    # ── Transaction History ──
+    if st.session_state.otp_history:
+        st.markdown('<div class="glow-divider"></div>', unsafe_allow_html=True)
+        st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+        st.markdown("### 📜 Transaction History")
+
+        for _th in st.session_state.otp_history[:15]:
+            _is_ok = "APPROVED" in _th["status"]
+            _dot = "txn-dot-ok" if _is_ok else "txn-dot-fraud"
+            _badge = "badge-safe" if _is_ok else "badge-fraud"
+            _status_text = "APPROVED" if _is_ok else "BLOCKED"
+            st.markdown(f"""
+            <div class="txn-log-item">
+                <div class="{_dot}"></div>
+                <div style="flex:1;">
+                    <span style="color:#c0c0e0; font-weight:600;">{_th['id']}</span>
+                    <span style="color:rgba(200,200,255,0.4); font-size:0.75rem; margin-left:8px;">
+                        {_th['time']}
+                    </span>
+                </div>
+                <div style="color:#a0a0c0; font-size:0.85rem;">{_th['auth']}</div>
+                <div style="color:#e0e0f0; font-weight:700; min-width:80px; text-align:right;">
+                    ${_th['amount']:,.2f}
+                </div>
+                <div><span class="status-badge {_badge}">{_status_text}</span></div>
+            </div>
+            """, unsafe_allow_html=True)
+
+        st.markdown('</div>', unsafe_allow_html=True)
+
+        if st.button("🗑️ Clear History", key="tfa_clear_history"):
+            st.session_state.otp_history = []
+            st.rerun()
 
 
 # ══════════════════════════════════════════════
@@ -1854,3 +2071,439 @@ elif page == "⚡ Live Monitor":
                         time.sleep(0.05)
 
                 st.success(f"Stream complete! Processed {total} transactions — {frauds} fraud detected.")
+
+
+# ══════════════════════════════════════════════
+# PAGE 7 — Admin Monitoring Panel
+# ══════════════════════════════════════════════
+
+elif page == "🛡️ Admin Panel":
+    st.markdown('<div class="page-title">🛡️ Admin Monitoring Panel</div>', unsafe_allow_html=True)
+    st.markdown('<div class="page-subtitle">Review suspicious transactions, manage approvals, and analyse fraud trends</div>', unsafe_allow_html=True)
+
+    # ── Initialise session state ──
+    if "admin_actions" not in st.session_state:
+        st.session_state.admin_actions = []  # list of dicts
+
+    # ── Load data & model ──
+    _admin_df = load_dataset_sample(n=10000)
+
+    if _admin_df.empty:
+        st.warning("⚠️ No data found. Run `python main.py preprocess` first.")
+    else:
+        feature_cols_admin = [c for c in _admin_df.columns if c != "target"]
+        X_admin = _admin_df[feature_cols_admin]
+
+        # Load best model
+        _admin_model = None
+        _admin_model_name = "N/A"
+        for _mk, _mn in [("xgboost", "XGBoost"), ("random_forest", "Random Forest"),
+                         ("lightgbm", "LightGBM"), ("naive_bayes", "Naive Bayes")]:
+            _mp = MODELS_DIR / f"{DATASET_NAME}_smote_{_mk}.joblib"
+            if _mp.exists():
+                _admin_model = joblib.load(_mp)
+                _admin_model_name = _mn
+                break
+            _others = list(MODELS_DIR.glob(f"*_{_mk}.joblib"))
+            if _others:
+                _admin_model = joblib.load(_others[0])
+                _admin_model_name = _mn
+                break
+
+        if _admin_model is None:
+            st.warning("⚠️ No trained model found. Run `python main.py train` first.")
+        else:
+            # Compute risk scores for all transactions
+            @st.cache_data
+            def _compute_admin_scores(_X_csv):
+                """Deterministic scoring cached on data content."""
+                _Xdf = pd.read_json(_X_csv)
+                mdl = _admin_model
+                if hasattr(mdl, "predict_proba"):
+                    probs = mdl.predict_proba(_Xdf)[:, 1] * 100
+                else:
+                    probs = mdl.predict(_Xdf).astype(float) * 100
+                return probs
+
+            _admin_probs = _compute_admin_scores(X_admin.to_json())
+
+            # Build enriched dataframe
+            admin_view = _admin_df.copy()
+            admin_view.insert(0, "Risk %", np.round(_admin_probs, 2))
+            admin_view.insert(0, "TXN_ID", [f"TXN-{i:06d}" for i in admin_view.index])
+
+            def _risk_label(pct):
+                if pct >= 80:
+                    return "🔴 High"
+                elif pct >= 50:
+                    return "🟡 Medium"
+                return "🟢 Low"
+
+            admin_view.insert(2, "Risk Level", admin_view["Risk %"].apply(_risk_label))
+
+            # Track which TXNs have been acted on
+            acted_ids = {a["txn_id"] for a in st.session_state.admin_actions}
+
+            # ── Tabs ──
+            tab_suspicious, tab_filter, tab_actions, tab_analytics = st.tabs([
+                "🔍 Suspicious Transactions",
+                "🎚️ Filter by Risk Level",
+                "✅ Approve / Block",
+                "📊 Fraud Analytics & Reports",
+            ])
+
+            # ════════════════════════════════════════
+            # TAB 1 — Suspicious Transactions
+            # ════════════════════════════════════════
+            with tab_suspicious:
+                st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+                st.markdown("### 🚨 Flagged Suspicious Transactions")
+                st.caption(f"Model: **{_admin_model_name}** — showing transactions with risk > 50 %")
+
+                flagged = admin_view[admin_view["Risk %"] > 50].sort_values("Risk %", ascending=False)
+
+                if flagged.empty:
+                    st.info("No suspicious transactions detected in the current sample.")
+                else:
+                    st.dataframe(
+                        flagged[["TXN_ID", "Risk Level", "Risk %", "Amount", "Time", "target"]].rename(
+                            columns={"target": "Actual Label"}
+                        ).style.background_gradient(subset=["Risk %"], cmap="YlOrRd"),
+                        use_container_width=True,
+                        height=400,
+                    )
+
+                    # Expandable SHAP explanations for top flagged transactions
+                    st.markdown('<div class="glow-divider"></div>', unsafe_allow_html=True)
+                    st.markdown("### 📋 Detailed Explanations (Top 20)")
+
+                    _shap_avail = False
+                    try:
+                        import shap
+                        _explainer = shap.TreeExplainer(_admin_model)
+                        _shap_avail = True
+                    except Exception:
+                        pass
+
+                    for _pos, (_ridx, _row) in enumerate(flagged.head(20).iterrows()):
+                        risk_color = "#f87171" if _row["Risk %"] >= 80 else "#fbbf24"
+                        with st.expander(f"{_row['TXN_ID']}  —  💰 ${_row['Amount']:.2f}  —  Risk {_row['Risk %']:.1f}%"):
+                            if _shap_avail:
+                                try:
+                                    _sv = _explainer.shap_values(X_admin.iloc[[_ridx]])
+                                    if isinstance(_sv, list):
+                                        _sv = _sv[1][0]
+                                    else:
+                                        _sv = _sv[0]
+                                    _impacts = sorted(
+                                        zip(feature_cols_admin, _sv,
+                                            [_admin_df.iloc[_ridx][f] for f in feature_cols_admin]),
+                                        key=lambda x: abs(x[1]), reverse=True,
+                                    )[:5]
+                                    for _feat, _imp, _val in _impacts:
+                                        st.markdown(_describe_feature(_feat, _val, _imp))
+                                except Exception:
+                                    st.info("SHAP explanation unavailable for this transaction.")
+                            else:
+                                st.info("Install `shap` for detailed feature explanations.")
+
+                st.markdown('</div>', unsafe_allow_html=True)
+
+            # ════════════════════════════════════════
+            # TAB 2 — Filter by Risk Level
+            # ════════════════════════════════════════
+            with tab_filter:
+                st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+                st.markdown("### 🎚️ Filter Transactions")
+
+                fc1, fc2, fc3 = st.columns([2, 2, 3])
+                with fc1:
+                    risk_filter = st.selectbox(
+                        "Risk Level",
+                        ["All", "🔴 High (≥80%)", "🟡 Medium (50-80%)", "🟢 Low (<50%)"],
+                        key="admin_risk_filter",
+                    )
+                with fc2:
+                    amt_range = st.slider(
+                        "Amount Range",
+                        float(admin_view["Amount"].min()),
+                        float(admin_view["Amount"].max()),
+                        (float(admin_view["Amount"].min()), float(admin_view["Amount"].max())),
+                        key="admin_amt_range",
+                    )
+                with fc3:
+                    txn_search = st.text_input("🔎 Search Transaction ID", key="admin_txn_search")
+
+                filtered = admin_view.copy()
+                if risk_filter == "🔴 High (≥80%)":
+                    filtered = filtered[filtered["Risk %"] >= 80]
+                elif risk_filter == "🟡 Medium (50-80%)":
+                    filtered = filtered[(filtered["Risk %"] >= 50) & (filtered["Risk %"] < 80)]
+                elif risk_filter == "🟢 Low (<50%)":
+                    filtered = filtered[filtered["Risk %"] < 50]
+
+                filtered = filtered[
+                    (filtered["Amount"] >= amt_range[0]) & (filtered["Amount"] <= amt_range[1])
+                ]
+
+                if txn_search:
+                    filtered = filtered[filtered["TXN_ID"].str.contains(txn_search, case=False)]
+
+                # KPI row
+                kc1, kc2, kc3, kc4 = st.columns(4)
+                _kpi_data = [
+                    ("📦", f"{len(filtered):,}", "Matching Txns"),
+                    ("🔴", f"{int((filtered['Risk %'] >= 80).sum()):,}", "High Risk"),
+                    ("🟡", f"{int(((filtered['Risk %'] >= 50) & (filtered['Risk %'] < 80)).sum()):,}", "Medium Risk"),
+                    ("🟢", f"{int((filtered['Risk %'] < 50).sum()):,}", "Low Risk"),
+                ]
+                for _i, (_icon, _val, _lbl) in enumerate(_kpi_data):
+                    [kc1, kc2, kc3, kc4][_i].markdown(f"""
+                        <div class="metric-card delay-{_i+1}">
+                            <div class="metric-icon">{_icon}</div>
+                            <div class="metric-value">{_val}</div>
+                            <div class="metric-label">{_lbl}</div>
+                        </div>
+                    """, unsafe_allow_html=True)
+
+                st.markdown('<div class="glow-divider"></div>', unsafe_allow_html=True)
+
+                st.dataframe(
+                    filtered[["TXN_ID", "Risk Level", "Risk %", "Amount", "Time", "target"]].rename(
+                        columns={"target": "Actual Label"}
+                    ).sort_values("Risk %", ascending=False).style.background_gradient(
+                        subset=["Risk %"], cmap="YlOrRd"
+                    ),
+                    use_container_width=True,
+                    height=500,
+                )
+                st.markdown('</div>', unsafe_allow_html=True)
+
+            # ════════════════════════════════════════
+            # TAB 3 — Approve / Block Actions
+            # ════════════════════════════════════════
+            with tab_actions:
+                st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+                st.markdown("### ✅ Pending Suspicious Transactions")
+                st.caption("Take action on flagged transactions — approve legitimate ones or block fraud.")
+
+                pending = admin_view[
+                    (admin_view["Risk %"] > 50) & (~admin_view["TXN_ID"].isin(acted_ids))
+                ].sort_values("Risk %", ascending=False).head(30)
+
+                if pending.empty:
+                    st.success("🎉 All suspicious transactions have been reviewed!")
+                else:
+                    for _pi, (_pidx, _prow) in enumerate(pending.iterrows()):
+                        _risk_col = "#f87171" if _prow["Risk %"] >= 80 else "#fbbf24"
+                        _badge_cls = "badge-fraud" if _prow["Risk %"] >= 80 else "badge-safe"
+
+                        st.markdown(f"""
+                        <div style="background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08);
+                                    border-radius:12px; padding:16px; margin:8px 0;
+                                    display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;">
+                            <div>
+                                <span style="font-weight:700; color:#e0e0f0; font-size:1rem;">{_prow['TXN_ID']}</span>
+                                <span style="margin-left:14px; color:#94a3b8; font-size:0.85rem;">
+                                    💰 ${_prow['Amount']:.2f} &nbsp;|&nbsp; 🕐 {_prow['Time']:.0f}s
+                                </span>
+                            </div>
+                            <div style="background:{_risk_col}; color:#0a0a1a; padding:4px 14px;
+                                        border-radius:20px; font-weight:700; font-size:0.82rem;">
+                                {_prow['Risk %']:.1f}% Risk
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+
+                        bcol1, bcol2, _ = st.columns([1, 1, 4])
+                        with bcol1:
+                            if st.button("✅ Approve", key=f"approve_{_prow['TXN_ID']}"):
+                                st.session_state.admin_actions.append({
+                                    "txn_id": _prow["TXN_ID"],
+                                    "action": "APPROVED",
+                                    "risk": _prow["Risk %"],
+                                    "amount": _prow["Amount"],
+                                    "time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                })
+                                st.rerun()
+                        with bcol2:
+                            if st.button("🚫 Block", key=f"block_{_prow['TXN_ID']}"):
+                                st.session_state.admin_actions.append({
+                                    "txn_id": _prow["TXN_ID"],
+                                    "action": "BLOCKED",
+                                    "risk": _prow["Risk %"],
+                                    "amount": _prow["Amount"],
+                                    "time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                })
+                                st.rerun()
+
+                st.markdown('</div>', unsafe_allow_html=True)
+
+                # ── Action Log ──
+                st.markdown('<div class="glow-divider"></div>', unsafe_allow_html=True)
+                st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+                st.markdown("### 📜 Action Log")
+
+                if st.session_state.admin_actions:
+                    log_df = pd.DataFrame(st.session_state.admin_actions)
+                    log_df = log_df.rename(columns={
+                        "txn_id": "Transaction", "action": "Decision",
+                        "risk": "Risk %", "amount": "Amount", "time": "Timestamp",
+                    })
+
+                    for _, _lrow in log_df.iterrows():
+                        _dot = "txn-dot-fraud" if _lrow["Decision"] == "BLOCKED" else "txn-dot-ok"
+                        _badge = "badge-fraud" if _lrow["Decision"] == "BLOCKED" else "badge-safe"
+                        st.markdown(f"""
+                        <div class="txn-log-item">
+                            <div class="{_dot}"></div>
+                            <div style="flex:1;">
+                                <span style="color:#c0c0e0; font-weight:600;">{_lrow['Transaction']}</span>
+                                <span style="color:rgba(200,200,255,0.4); font-size:0.75rem; margin-left:8px;">
+                                    {_lrow['Timestamp']}
+                                </span>
+                            </div>
+                            <div style="color:#a0a0c0; font-size:0.85rem;">Risk: {_lrow['Risk %']:.1f}%</div>
+                            <div style="color:#e0e0f0; font-weight:700; min-width:80px; text-align:right;">
+                                ${_lrow['Amount']:.2f}
+                            </div>
+                            <div><span class="status-badge {_badge}">{_lrow['Decision']}</span></div>
+                        </div>
+                        """, unsafe_allow_html=True)
+
+                    if st.button("🗑️ Clear Action Log", key="admin_clear_log"):
+                        st.session_state.admin_actions = []
+                        st.rerun()
+                else:
+                    st.info("No actions taken yet. Review transactions above to get started.")
+
+                st.markdown('</div>', unsafe_allow_html=True)
+
+            # ════════════════════════════════════════
+            # TAB 4 — Fraud Analytics & Reports
+            # ════════════════════════════════════════
+            with tab_analytics:
+                # KPI cards
+                n_flagged = int((admin_view["Risk %"] > 50).sum())
+                n_approved = sum(1 for a in st.session_state.admin_actions if a["action"] == "APPROVED")
+                n_blocked = sum(1 for a in st.session_state.admin_actions if a["action"] == "BLOCKED")
+                avg_risk = admin_view["Risk %"].mean()
+
+                acols = st.columns(4)
+                _a_kpis = [
+                    ("🚨", f"{n_flagged:,}", "Total Flagged"),
+                    ("✅", f"{n_approved:,}", "Approved"),
+                    ("🚫", f"{n_blocked:,}", "Blocked"),
+                    ("📊", f"{avg_risk:.2f}%", "Avg Risk Score"),
+                ]
+                for _i, (_icon, _val, _lbl) in enumerate(_a_kpis):
+                    acols[_i].markdown(f"""
+                        <div class="metric-card delay-{_i+1}">
+                            <div class="metric-icon">{_icon}</div>
+                            <div class="metric-value">{_val}</div>
+                            <div class="metric-label">{_lbl}</div>
+                        </div>
+                    """, unsafe_allow_html=True)
+
+                st.markdown('<div class="glow-divider"></div>', unsafe_allow_html=True)
+
+                # Chart row 1
+                ch1, ch2 = st.columns(2)
+
+                with ch1:
+                    st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+                    fig = go.Figure(go.Histogram(
+                        x=admin_view["Risk %"],
+                        nbinsx=40,
+                        marker_color="#818cf8",
+                        opacity=0.85,
+                    ))
+                    fig = styled_plotly(fig, height=380)
+                    fig.update_layout(
+                        title=dict(text="Risk Score Distribution", font=dict(size=18)),
+                        xaxis_title="Risk %",
+                        yaxis_title="Count",
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+                    st.markdown('</div>', unsafe_allow_html=True)
+
+                with ch2:
+                    st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+                    _fraud_cnt = int(admin_view["target"].sum())
+                    _legit_cnt = len(admin_view) - _fraud_cnt
+                    fig = go.Figure(go.Pie(
+                        labels=["Legitimate", "Fraudulent"],
+                        values=[_legit_cnt, _fraud_cnt],
+                        hole=0.65,
+                        marker=dict(colors=["#34d399", "#f87171"],
+                                    line=dict(color="#0a0a1a", width=3)),
+                        textinfo="percent+label",
+                        pull=[0, 0.08],
+                    ))
+                    fig = styled_plotly(fig, height=380)
+                    fig.update_layout(
+                        title=dict(text="Fraud vs Legitimate", font=dict(size=18)),
+                        showlegend=False,
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+                    st.markdown('</div>', unsafe_allow_html=True)
+
+                st.markdown('<div class="glow-divider"></div>', unsafe_allow_html=True)
+
+                # Chart row 2
+                ch3, ch4 = st.columns(2)
+
+                with ch3:
+                    st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+                    top10 = admin_view.nlargest(10, "Risk %")
+                    fig = go.Figure(go.Bar(
+                        x=top10["TXN_ID"],
+                        y=top10["Risk %"],
+                        marker=dict(
+                            color=top10["Risk %"],
+                            colorscale=[[0, "#fbbf24"], [0.5, "#f87171"], [1, "#dc2626"]],
+                            cornerradius=8,
+                        ),
+                        text=[f"{v:.1f}%" for v in top10["Risk %"]],
+                        textposition="outside",
+                        textfont=dict(color="#c0c0e0", size=11),
+                    ))
+                    fig = styled_plotly(fig, height=380)
+                    fig.update_layout(
+                        title=dict(text="Top 10 Highest-Risk Transactions", font=dict(size=18)),
+                        xaxis_title="", yaxis_title="Risk %",
+                        yaxis=dict(range=[0, 110]),
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+                    st.markdown('</div>', unsafe_allow_html=True)
+
+                with ch4:
+                    st.markdown('<div class="glass-card">', unsafe_allow_html=True)
+                    # Time-binned fraud trend
+                    _trend = admin_view.copy()
+                    _trend["Time_Bin"] = pd.cut(_trend["Time"], bins=20, labels=False)
+                    _trend_agg = _trend.groupby("Time_Bin").agg(
+                        fraud_count=("target", "sum"),
+                        total=("target", "count"),
+                    ).reset_index()
+                    _trend_agg["fraud_rate"] = _trend_agg["fraud_count"] / _trend_agg["total"] * 100
+
+                    fig = go.Figure()
+                    fig.add_trace(go.Scatter(
+                        x=_trend_agg["Time_Bin"],
+                        y=_trend_agg["fraud_rate"],
+                        mode="lines+markers",
+                        line=dict(color="#f472b6", width=3),
+                        marker=dict(size=8, color="#c084fc"),
+                        fill="tozeroy",
+                        fillcolor="rgba(244,114,182,0.12)",
+                        name="Fraud Rate",
+                    ))
+                    fig = styled_plotly(fig, height=380)
+                    fig.update_layout(
+                        title=dict(text="Fraud Trend over Time", font=dict(size=18)),
+                        xaxis_title="Time Bin",
+                        yaxis_title="Fraud Rate %",
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+                    st.markdown('</div>', unsafe_allow_html=True)
