@@ -2507,3 +2507,8 @@ elif page == "🛡️ Admin Panel":
                     )
                     st.plotly_chart(fig, use_container_width=True)
                     st.markdown('</div>', unsafe_allow_html=True)
+import os
+import subprocess
+
+if not os.path.exists("data/processed_data.csv"):
+    subprocess.run(["python", "main.py", "preprocess"])
