@@ -1,5 +1,6 @@
-# 🛡️ Credit Card Fraud Detection Using Ensemble Learning & Deep Learning
+# 🛡️ Intelligent Credit Card Fraud Detection Using Ensemble Learning & Deep Learning
 AN PROJECT BY  RAGUL RAVICHANDIRAN and by its team 
+A machine learning project for AI&ML 
 
 A comprehensive final-year project that replicates existing ensemble-learning research **and** proposes novel deep-learning and explainability enhancements for identifying fraudulent credit-card transactions.
 
@@ -212,7 +213,7 @@ streamlit run dashboard/app.py
 | Storage | 50 GB free |
 | GPU | Recommended for deep learning |
 | OS | Windows / Linux / macOS |
-
+cmd varies based on the OS used 
 ---
 
 ## License
